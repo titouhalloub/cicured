@@ -1,0 +1,10 @@
+# SFT-Dev project rules
+- Read docs/SFT-Dev_Spec.md before any task. It is the single source of truth; the plan and kickoff docs are superseded.
+- Work one milestone at a time. Do not start the next milestone. Stop when acceptance criteria pass.
+- TypeScript strict mode everywhere. No `any` without a comment justifying it.
+- All cross-package data shapes live in packages/schemas as zod schemas. Never redefine them elsewhere.
+- Never put secrets in code, logs, job payloads or DB rows. Tokens are passed via env only.
+- packages/runner/sft-dev.mjs is pinned: do not modify it without adding/adjusting its tests.
+- Every feature ships with tests. Run `pnpm -r typecheck && pnpm -r lint && pnpm -r test` before declaring done.
+- Ask before adding a dependency that is not already in §0.
+- Commit per logical step with conventional commit messages.

@@ -1,0 +1,23 @@
+{
+  "name": "@sft/schemas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared zod contracts for SFT-Dev (Spec §5): report v2, findings, suggestions, run status, failure kinds, rule IDs",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0",
+    "eslint": "^10.11.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}

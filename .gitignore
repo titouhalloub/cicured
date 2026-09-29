@@ -1,0 +1,25 @@
+# dependencies & build output
+node_modules/
+dist/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# env & secrets (never commit; .env.example only)
+.env
+.env.*
+!.env.example
+
+# logs & runner artifacts
+*.log
+npm-debug.log*
+pnpm-debug.log*
+sft-report.json
+
+# editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+!.vscode/extensions.json

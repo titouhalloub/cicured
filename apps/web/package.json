@@ -1,0 +1,19 @@
+{
+  "name": "@sft/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SFT-Dev web package (M1 placeholder only; the Next.js UI is M4 scope)",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0",
+    "eslint": "^10.11.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}

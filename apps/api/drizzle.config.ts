@@ -2,7 +2,7 @@ import { defineConfig } from "drizzle-kit";
 
 /** Offline config for `drizzle-kit generate`; runtime migrations use src/db/migrate.ts. */
 export default defineConfig({
-  schema: "./src/db/schema.ts",
+  schema: ["./src/db/schema.ts", "./src/db/tables.ts"],
   out: "./drizzle",
   dialect: "postgresql",
   dbCredentials: {

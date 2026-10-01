@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790820193019,
+      "tag": "0000_lean_lady_deathstrike",
+      "breakpoints": true
+    }
+  ]
+}

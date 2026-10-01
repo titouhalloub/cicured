@@ -17,6 +17,9 @@ npm-debug.log*
 pnpm-debug.log*
 sft-report.json
 
+# worker run artifacts (sandbox reports, M2a)
+apps/worker/tmp/
+
 # editors / OS
 .DS_Store
 Thumbs.db

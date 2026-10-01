@@ -5,6 +5,13 @@ allowBuilds:
   '@swc/core': true
   esbuild: true
   msgpackr-extract: true
+  # dockerode -> ssh2 pulls these in. All three are explicitly DISALLOWED: their
+  # install scripts either compile native code (cpu-features) or are pure
+  # packaging no-ops (protobufjs, ssh2). M2a only talks to the local Docker
+  # Unix socket, so the optional TCP transport is never used.
+  cpu-features: false
+  protobufjs: false
+  ssh2: false
 minimumReleaseAgeExclude:
   - '@nestjs/common@12.1.1'
   - '@nestjs/core@12.1.1'

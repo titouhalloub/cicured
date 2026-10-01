@@ -2,7 +2,7 @@
 
 Git-native build & repair intelligence platform — *"CI that doesn't just tell you it broke — it tells you why and how to fix it."*
 
-**Current milestone: M1 — Foundation** (`docs/SFT-Dev_Spec.md` §11/§14). M2 has **not** been started.
+**Current milestone: M2a — Worker + sandbox** (`docs/SFT-Dev_Spec.md` §11). M2b (log streaming, SSE, S3 archival, webhooks) has **not** been started.
 
 ## Layout
 
@@ -10,10 +10,11 @@ Git-native build & repair intelligence platform — *"CI that doesn't just tell 
 |---|---|
 | `apps/web` | Next.js frontend (dashboard lands in M4) |
 | `apps/api` | NestJS REST API, Drizzle schema + migrations, BullMQ producer |
-| `apps/worker` | **Empty M2 scaffold** (no M2 code may be written during M1) |
+| `apps/worker` | BullMQ consumer + one hardened Docker sandbox per run (M2a) |
 | `packages/schemas` | zod contracts shared across packages (§5 data shapes, rule IDs, status machine) |
 | `packages/parser` | Empty scaffold (deterministic parsers land in M3) |
 | `packages/runner` | Pinned `sft-dev.mjs` + its exit-code/timeout/config tests (§2) |
+| `docker/sandbox` | `cicured/sandbox:node20` image + entrypoint (clone → install → runner) |
 | `docs` | Canonical spec + the pinned runner as provided |
 
 ## Quick start
@@ -27,6 +28,32 @@ pnpm -r typecheck && pnpm -r lint && pnpm -r test
 ```
 
 API dev server: `pnpm --filter @sft/api dev` → `GET http://localhost:4000/health`.
+
+## Running M2a locally
+
+1. `docker compose up -d` (Postgres + Redis) and `pnpm i`; copy `.env.example` → `.env` and fill `SESSION_SECRET`, `SFT_ENCRYPTION_KEY`, `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY`.
+2. `pnpm db:migrate`, then build the sandbox image from the **repo root**: `docker build -f docker/sandbox/Dockerfile -t cicured/sandbox:node20 .`.
+3. Start both processes: `pnpm --filter @sft/api start` and `pnpm --filter @sft/worker start` (the worker needs access to `/var/run/docker.sock`).
+4. Create a project and a run via the API (`POST /projects`, then `POST /projects/:id/run`) — the API inserts a `queued` row and enqueues the job.
+5. The worker picks it up, launches one container (clone → lockfile-aware install → pinned runner) and classifies the exit code: `0`→`success`, `1`→`failed`, `2`→`runner_crash`, over budget→`timeout`.
+6. Check `apps/worker/tmp/reports/<runId>.json` for the zod-validated `sft-report.json` and `SELECT status, exit_code, failure_kind, build_minutes FROM runs WHERE id = '<runId>';`.
+
+### M2b requires
+
+M2b MUST add the egress allowlist proxy from Spec §8 before any external traffic is enabled. Default bridge network is acceptable for local M2a only.
+
+## M2a implementation notes (decisions & deviations)
+
+1. **Container launch via dockerode**, never `docker run`; hardening is set per container (read-only rootfs, tmpfs `/workspace` 1 GB + `/tmp` 64 MB, `no-new-privileges`, default seccomp, `CapDrop: ALL`, 4 GB / 2 CPU). `AutoRemove` stays **false** because the report is read out of the container filesystem after exit.
+2. **Runner injection is a read-only bind mount** of `packages/runner/sft-dev.mjs` to `/opt/sft/sft-dev.mjs`, resolved from `SFT_RUNNER_HOST_PATH` (defaults to the repo path) and verified at boot. The runner is never copied from the user's repo and never installed.
+3. **Credentials** — the worker mints a GitHub App installation token per run, passes it as `GIT_TOKEN`, and the entrypoint unsets `GIT_*`/`GITHUB_*` before `exec`ing the runner (which scrubs them again). Tokens never reach Postgres, job payloads or logs; `apps/worker/src/common/secrets.ts` masks them in every log line.
+4. **Deadline arithmetic lives in the entrypoint** (`SFT_DEADLINE_MS = budget − installMs − 60 s`) so the container's own wall clock — not a worker-side estimate — decides the runner deadline (§2 pre-flight).
+5. **Writable paths on a read-only rootfs**: the entrypoint redirects `HOME`, `npm`/`pnpm`/`yarn`/corepack caches into the `/workspace` tmpfs and sets `COREPACK_ENABLE_DOWNLOAD_PROMPT=0`, otherwise installs hang or fail.
+6. **Report handling** uses the shared `parseSftReport` (zod + 2 MB cap) rather than a second definition; a missing or invalid report makes the run `runner_crash` even on exit 0/1, because there is nothing for M3's parser to consume.
+7. **Worker tables mirror the API's** (`apps/worker/src/tables.ts`) instead of importing the whole API app; `test/schema-parity.spec.ts` imports the API's real definitions so the duplication cannot drift silently. A shared `@sft/db` package is a post-M2a cleanup.
+8. **Job payload**: M1 sends `{ runId, projectId }`; the worker resolves the project from the run row and logs `deprecated projectId in queue payload (M1 compatibility)` so the occurrences are greppable until the cleanup.
+9. **S3 columns stay null in M2a** — reports are written to `REPORTS_DIR` on the worker host; archival with the 30-day retention boundary is M2b.
+10. **`sft-dev.config.json`** at the repo root pins this repo's own tasks (typecheck → lint → build → tests) for the runner's config-override hook.
 
 ## M1 acceptance criteria (§14)
 

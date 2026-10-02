@@ -3,7 +3,7 @@
 This document supersedes `SFT-Dev_Technical_Plan.md` and `CLINE_KICKOFF.md`. There is no precedence order — this file is the single source of truth. Where the prior docs disagreed (task order, timeouts, sandbox platform, buffer caps), the resolution is stated inline with a **⚠ RESOLVED** marker.
 
 Companion files:
-- `sft-dev2.mjs` — pinned runner. Do not modify without adding/adjusting its tests.
+- `packages/runner/sft-dev.mjs` — pinned runner (the canonical artifact; it was previously also copied to `docs/sft-dev2.mjs`, removed in M2a). Do not modify without adding/adjusting its tests.
 - `React-Nextjs-Tester-project.docx` — business/product vision. **Not a spec.** See §13 for what is explicitly out of MVP scope.
 
 ---
@@ -12,7 +12,7 @@ Companion files:
 
 | Topic | Decision |
 |---|---|
-| Repo layout | pnpm monorepo: `apps/web` (Next.js), `apps/api` (NestJS), `apps/worker` (Node/TS), `packages/runner` (copied `sft-dev2.mjs` + tests), `packages/schemas` (zod), `packages/parser` |
+| Repo layout | pnpm monorepo: `apps/web` (Next.js), `apps/api` (NestJS), `apps/worker` (Node/TS), `packages/runner` (pinned `sft-dev.mjs` + tests), `packages/schemas` (zod), `packages/parser` |
 | API framework | NestJS (TypeScript end to end, shares zod schemas) |
 | ORM / migrations | Drizzle + drizzle-kit, PostgreSQL 16 |
 | Queue | BullMQ on Redis 7 |
@@ -318,4 +318,4 @@ Present your plan first. Do not start M2.
 
 **Preserved from the kickoff unchanged:** all of §0, all of §1 corrections, `.clinerules`, M1–M5 acceptance criteria, the M1 paste prompt (with the doc reference updated).
 
-**Explicitly rejected:** the docx's draft runner script — it is buggier than `sft-dev2.mjs` (`+ 1000` instead of `* 1000` on hrtime, nonexistent `statusName` field, no process-group kill, invented AI-session env vars) and its report shape is incompatible with schema v2.
+**Explicitly rejected:** the docx's draft runner script — it is buggier than the provided `sft-dev.mjs` (`+ 1000` instead of `* 1000` on hrtime, nonexistent `statusName` field, no process-group kill, invented AI-session env vars) and its report shape is incompatible with schema v2.

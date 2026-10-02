@@ -61,8 +61,9 @@ export interface SandboxLauncher {
  *
  * Hardening (Spec §0/§8): read-only root filesystem, tmpfs-only workspace,
  * `no-new-privileges`, Docker's default seccomp profile, all capabilities
- * dropped, 2 CPU / 4 GB. `AutoRemove` stays false because the report is read
- * out of the container filesystem after the run has finished.
+ * dropped, 2 CPU / 4 GB. `AutoRemove` stays false so the container's lifetime is
+ * explicit: the worker removes it in a `finally` block, and a run can always be
+ * inspected if something goes wrong.
  */
 export async function createSandboxContainer(
   docker: DockerLike,

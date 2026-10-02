@@ -44,12 +44,12 @@ M2b MUST add the egress allowlist proxy from Spec §8 before any external traffi
 
 ## M2a implementation notes (decisions & deviations)
 
-1. **Container launch via dockerode**, never `docker run`; hardening is set per container (read-only rootfs, tmpfs `/workspace` 1 GB + `/tmp` 64 MB, `no-new-privileges`, default seccomp, `CapDrop: ALL`, 4 GB / 2 CPU). `AutoRemove` stays **false** because the report is read out of the container filesystem after exit.
+1. **Container launch via dockerode**, never `docker run`; hardening is set per container (read-only rootfs, tmpfs `/workspace` 1 GB + `/tmp` 64 MB, `no-new-privileges`, default seccomp, `CapDrop: ALL`, 4 GB / 2 CPU). `AutoRemove` stays **false** so the container's lifetime is explicit — the worker removes it in a `finally` block.
 2. **Runner injection is a read-only bind mount** of `packages/runner/sft-dev.mjs` to `/opt/sft/sft-dev.mjs`, resolved from `SFT_RUNNER_HOST_PATH` (defaults to the repo path) and verified at boot. The runner is never copied from the user's repo and never installed.
-3. **Credentials** — the worker mints a GitHub App installation token per run, passes it as `GIT_TOKEN`, and the entrypoint unsets `GIT_*`/`GITHUB_*` before `exec`ing the runner (which scrubs them again). Tokens never reach Postgres, job payloads or logs; `apps/worker/src/common/secrets.ts` masks them in every log line.
+3. **Credentials** — the worker mints a GitHub App installation token per run and passes it as `GIT_TOKEN`; the entrypoint unsets `GIT_*`/`GITHUB_*` *before* launching the runner (which scrubs them again). Tokens never reach Postgres, job payloads or logs; `apps/worker/src/common/secrets.ts` masks them in every log line.
 4. **Deadline arithmetic lives in the entrypoint** (`SFT_DEADLINE_MS = budget − installMs − 60 s`) so the container's own wall clock — not a worker-side estimate — decides the runner deadline (§2 pre-flight).
 5. **Writable paths on a read-only rootfs**: the entrypoint redirects `HOME`, `npm`/`pnpm`/`yarn`/corepack caches into the `/workspace` tmpfs and sets `COREPACK_ENABLE_DOWNLOAD_PROMPT=0`, otherwise installs hang or fail.
-6. **Report handling** uses the shared `parseSftReport` (zod + 2 MB cap) rather than a second definition; a missing or invalid report makes the run `runner_crash` even on exit 0/1, because there is nothing for M3's parser to consume.
+6. **The report leaves via a bind mount, not Docker.** `/workspace` is a tmpfs, so when the container exits Docker unmounts it and `sft-report.json` is gone — `getArchive` then answers 404. Instead each run gets a host directory `REPORTS_DIR/<runId>` bind-mounted at `/out` (mode `0777`, because the sandbox user is uid 1001 and the worker cannot chown); the entrypoint copies the report there after the runner exits and propagates the runner's exit code via an explicit `exit "$runner_exit"`. The worker validates from disk with the shared `parseSftReport` (zod + 2 MB cap), writes `<REPORTS_DIR>/<runId>.json` mode `0600`, and removes the per-run directory. A missing or invalid report makes the run `runner_crash` even on exit 0/1, because there is nothing for M3's parser to consume.
 7. **Worker tables mirror the API's** (`apps/worker/src/tables.ts`) instead of importing the whole API app; `test/schema-parity.spec.ts` imports the API's real definitions so the duplication cannot drift silently. A shared `@sft/db` package is a post-M2a cleanup.
 8. **Job payload**: M1 sends `{ runId, projectId }`; the worker resolves the project from the run row and logs `deprecated projectId in queue payload (M1 compatibility)` so the occurrences are greppable until the cleanup.
 9. **S3 columns stay null in M2a** — reports are written to `REPORTS_DIR` on the worker host; archival with the 30-day retention boundary is M2b.
@@ -72,7 +72,7 @@ M2b MUST add the egress allowlist proxy from Spec §8 before any external traffi
 6. **`GET /repos`** — requires `?installationId=`, mints a GitHub App installation token (1h TTL) and lists that installation's repos. User OAuth tokens are never persisted.
 7. **`GET /health/ready`** added next to liveness `GET /health` for the ops metrics in §9.
 8. **Unique indexes for idempotency**: `projects(provider, repo_full_name)`, `findings(run_id, fingerprint)`, `project_env_vars(project_id, key)`, `webhook_deliveries(provider, delivery_id)`.
-9. **`packages/runner/sft-dev.mjs` is byte-identical** to the provided `docs/sft-dev2.mjs`; a sha256 pin test fails if it is edited without updating tests.
+9. **`packages/runner/sft-dev.mjs` is the canonical pinned runner.** The redundant `docs/sft-dev2.mjs` copy was removed in M2a; a sha256 pin test fails if the canonical artifact is edited without updating tests.
 10. **Run creation is two-phase**: insert `queued` row → enqueue BullMQ job (`jobId = runId`). If the enqueue fails the row is marked `cancelled` and the API returns 503 (no orphan `queued` rows).
 
 ### Internal packages are consumed as TypeScript source
@@ -82,8 +82,8 @@ Workspace packages point `main`/`types` at `src/index.ts`. tsc, Vitest, tsx and 
 ## Docs
 
 - `docs/SFT-Dev_Spec.md` — canonical spec, the single source of truth.
-- `docs/sft-dev2.mjs` — the pinned runner exactly as provided (§2); the test
-  suite asserts its sha256 so any change is deliberate.
+- `packages/runner/sft-dev.mjs` — the pinned runner, the canonical artifact (§2).
+  The test suite asserts its sha256 so any change is deliberate.
 
 Business material (the product `.docx` and the raw spec download it came with)
 is deliberately **not** kept in the repo: §14 scopes the work to the spec, and

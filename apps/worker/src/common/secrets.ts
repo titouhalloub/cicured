@@ -42,7 +42,13 @@ export interface WorkerLogger {
   info(message: string): void;
   warn(message: string, error?: unknown): void;
   error(message: string, error?: unknown): void;
-  child(bindings: Record<string, string>): WorkerLogger;
+  /**
+   * A child logger starts from a clean slate: it does NOT inherit the parent's
+   * scope or bindings. Per-run lines must not be prefixed with boot-only
+   * context (`boot queue=sft-runs`). The optional second argument sets a new
+   * scope for the child, e.g. `logger.child({ runId }, "task")`.
+   */
+  child(bindings: Record<string, string>, scope?: string): WorkerLogger;
 }
 
 function renderBindings(bindings: Record<string, string>): string {
@@ -55,11 +61,13 @@ function errorMessage(error: unknown): string {
 }
 
 export function createLogger(
-  scope: string,
+  scope?: string,
   bindings: Record<string, string> = {},
 ): WorkerLogger {
   const suffix = renderBindings(bindings);
-  const line = (message: string): string => redact(`[sft-worker] ${scope}${suffix} ${message}`);
+  // A missing scope must not leave a double space after the [sft-worker] tag.
+  const prefix = scope ? `[sft-worker] ${scope}` : "[sft-worker]";
+  const line = (message: string): string => redact(`${prefix}${suffix} ${message}`);
   return {
     info(message) {
       console.log(line(message));
@@ -71,8 +79,9 @@ export function createLogger(
     error(message, error) {
       console.error(line(error === undefined ? message : `${message}: ${errorMessage(error)}`));
     },
-    child(extra) {
-      return createLogger(scope, { ...bindings, ...extra });
+    child(bindings, childScope) {
+      // Fresh context: no parent scope, no parent bindings.
+      return createLogger(childScope, bindings);
     },
   };
 }

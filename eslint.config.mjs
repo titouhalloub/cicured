@@ -50,4 +50,16 @@ export default tseslint.config(
       "@typescript-eslint/consistent-type-imports": ["error", { prefer: "type-imports" }],
     },
   },
+  {
+    // NestJS resolves constructor dependencies through `design:paramtypes`, so
+    // every class used as an injection token MUST be a value import: a
+    // type-only import erases the class reference and DI fails at boot
+    // ("Nest can't resolve dependencies of the X (?, Object)"). This override
+    // applies to the API only; the worker, schemas and parser packages have no
+    // DI framework and keep the rule.
+    files: ["apps/api/src/**/*.ts"],
+    rules: {
+      "@typescript-eslint/consistent-type-imports": "off",
+    },
+  },
 );

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import type { UserRow } from "../db";
-import type { UsersService } from "../users/users.service";
-import type { GitHubClient } from "./github.client";
+import { UsersService } from "../users/users.service";
+import { GitHubClient } from "./github.client";
 
 @Injectable()
 export class AuthService {

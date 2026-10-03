@@ -27,3 +27,4 @@ Thumbs.db
 .vscode/
 !.vscode/extensions.json
 package-lock.json
+nohup.out

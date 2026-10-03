@@ -3,6 +3,7 @@ import { AuthModule } from "./auth/auth.module";
 import { ConfigModule } from "./config/config.module";
 import { DbModule } from "./db/db.module";
 import { HealthModule } from "./health/health.module";
+import { LogsModule } from "./logs/logs.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { QueueModule } from "./queue/queue.module";
 import { ReposModule } from "./repos/repos.module";
@@ -19,6 +20,7 @@ import { UsersModule } from "./users/users.module";
     ProjectsModule,
     ReposModule,
     RunsModule,
+    LogsModule,
     HealthModule,
   ],
 })

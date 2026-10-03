@@ -16,13 +16,12 @@ import type { Request, Response } from "express";
 import { appendSetCookie, parseCookies, serializeCookie } from "../common/cookies";
 import { toSessionUser } from "../common/dto";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
-import type { AppConfig } from "../config/app-config.service";
+import { AppConfig } from "../config/app-config.service";
 import type { UserRow } from "../db";
-import type { AuthService } from "./auth.service";
+import { AuthService } from "./auth.service";
 import { CurrentUser } from "./current-user.decorator";
-import type { GitHubClient } from "./github.client";
-import type {
-  SessionService} from "./session.service";
+import { GitHubClient } from "./github.client";
+import { SessionService } from "./session.service";
 import {
   OAUTH_STATE_COOKIE_NAME,
   SESSION_COOKIE_NAME

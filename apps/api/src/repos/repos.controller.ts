@@ -1,6 +1,6 @@
 import { Controller, Get, Query, UseGuards } from "@nestjs/common";
 import { ListReposQuery, type RepoSummary } from "@sft/schemas";
-import type { GitHubClient } from "../auth/github.client";
+import { GitHubClient } from "../auth/github.client";
 import { SessionGuard } from "../auth/session.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 

@@ -24,6 +24,8 @@ export const EnvSchema = z.object({
   REDIS_URL: z.string().min(1).default("redis://localhost:6379"),
   /** Same queue the API produces into (apps/api/src/queue/queue.module.ts). */
   SFT_QUEUE_NAME: z.string().min(1).default("sft-runs"),
+  /** Redis pub/sub channel prefix for live log streaming (M2b-1). */
+  SFT_LOG_CHANNEL_PREFIX: z.string().min(1).default("sft:logs:"),
 
   /** AES-256-GCM key: base64 (32 bytes) or 64-char hex. Same key the API uses. */
   SFT_ENCRYPTION_KEY: z.string().min(1, "SFT_ENCRYPTION_KEY is required"),

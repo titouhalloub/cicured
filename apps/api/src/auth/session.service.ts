@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Injectable } from "@nestjs/common";
-import type { AppConfig } from "../config/app-config.service";
+import { AppConfig } from "../config/app-config.service";
 
 export const SESSION_COOKIE_NAME = "sft_session";
 export const OAUTH_STATE_COOKIE_NAME = "sft_oauth_state";

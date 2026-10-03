@@ -4,3 +4,4 @@ export * from "./finding";
 export * from "./suggestion";
 export * from "./run";
 export * from "./project";
+export * from "./logs";

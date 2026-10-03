@@ -18,7 +18,7 @@ import { SessionGuard } from "../auth/session.guard";
 import { toRunSummary } from "../common/dto";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import type { UserRow } from "../db";
-import type { RunsService } from "./runs.service";
+import { RunsService } from "./runs.service";
 
 /** Run lifecycle endpoints (Spec §6). */
 @Controller()

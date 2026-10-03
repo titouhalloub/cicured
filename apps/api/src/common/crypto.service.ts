@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { Injectable } from "@nestjs/common";
-import type { AppConfig } from "../config/app-config.service";
+import { AppConfig } from "../config/app-config.service";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_BYTES = 12;

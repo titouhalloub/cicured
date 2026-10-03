@@ -17,6 +17,9 @@ export const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   REDIS_URL: z.string().min(1).default("redis://localhost:6379"),
   SFT_QUEUE_NAME: z.string().min(1).default("sft-runs"),
+  /** Redis pub/sub channel prefix for live log streaming (M2b-1). Must match
+   *  the worker's SFT_LOG_CHANNEL_PREFIX. */
+  SFT_LOG_CHANNEL_PREFIX: z.string().min(1).default("sft:logs:"),
 
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 characters"),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(168),

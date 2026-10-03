@@ -45,6 +45,11 @@ export class AppConfig {
     return this.env.SFT_QUEUE_NAME;
   }
 
+  /** Channel prefix for live log fan-out (M2b-1). */
+  get logChannelPrefix(): string {
+    return this.env.SFT_LOG_CHANNEL_PREFIX;
+  }
+
   get sessionSecret(): string {
     return this.env.SESSION_SECRET;
   }

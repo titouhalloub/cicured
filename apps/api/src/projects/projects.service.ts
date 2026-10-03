@@ -1,9 +1,9 @@
 import { ConflictException, Inject, Injectable } from "@nestjs/common";
 import type { CreateProjectInput } from "@sft/schemas";
 import { and, eq } from "drizzle-orm";
-import type { CryptoService } from "../common/crypto.service";
+import { CryptoService } from "../common/crypto.service";
 import { DRIZZLE, projects, type Database, type ProjectRow } from "../db";
-import type { GitHubClient } from "../auth/github.client";
+import { GitHubClient } from "../auth/github.client";
 
 /** Postgres unique-violation SQLSTATE. */
 const PG_UNIQUE_VIOLATION = "23505";

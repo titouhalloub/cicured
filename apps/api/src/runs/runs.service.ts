@@ -2,8 +2,8 @@ import { Inject, Injectable, NotFoundException, ServiceUnavailableException } fr
 import { assertRunStatusTransition, type CreateRunInput, type ListRunsQuery, type RunStatus } from "@sft/schemas";
 import { count, desc, eq } from "drizzle-orm";
 import { DRIZZLE, runs, type Database, type RunRow, type UserRow } from "../db";
-import type { ProjectsService } from "../projects/projects.service";
-import type { RunsQueue } from "../queue/runs-queue.service";
+import { ProjectsService } from "../projects/projects.service";
+import { RunsQueue } from "../queue/runs-queue.service";
 
 @Injectable()
 export class RunsService {

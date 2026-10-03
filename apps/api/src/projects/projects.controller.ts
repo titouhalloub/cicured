@@ -5,7 +5,7 @@ import { SessionGuard } from "../auth/session.guard";
 import { toProjectSummary } from "../common/dto";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import type { UserRow } from "../db";
-import type { ProjectsService } from "./projects.service";
+import { ProjectsService } from "./projects.service";
 
 /** POST /projects (Spec §6). */
 @Controller("projects")

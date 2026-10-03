@@ -5,6 +5,8 @@ import { createDb } from "./db";
 import { assertRunnerArtifact, loadDotEnvFile, loadEnv } from "./env";
 import { mintInstallationToken } from "./github/token";
 import { createRunJob } from "./job/run-job";
+import { attachAndStream } from "./logs/attach";
+import { createLogPublisher } from "./logs/publisher";
 import { extractAndValidateReport } from "./report/handler";
 import { createRunsWorker } from "./queue/runs.worker";
 import { createRunRepository } from "./run-repository";
@@ -29,12 +31,18 @@ async function main(): Promise<void> {
   const docker: DockerLike = new Docker();
   const sandbox = createSandboxLauncher(docker, env);
   const repository = createRunRepository(database.db);
+  // PUBLISH is an ordinary command, so the BullMQ client can carry the log
+  // traffic; only the API needs a dedicated subscriber connection.
+  const logPublisher = createLogPublisher(redis, env.SFT_LOG_CHANNEL_PREFIX);
 
   const processRun = createRunJob({
     env,
     repository,
     sandbox,
     logger,
+    publisher: logPublisher,
+    attach: ({ containerId, runId }) =>
+      attachAndStream(docker, containerId, runId, logPublisher, logger),
     mintToken: (installationId) => mintInstallationToken(installationId, env),
     extractReport: ({ containerId, runId }) =>
       extractAndValidateReport(
@@ -61,6 +69,7 @@ async function main(): Promise<void> {
     // Stop consuming, kill the sandbox that is mid-run, then release the
     // connections in the order they were opened.
     await worker.close();
+    await logPublisher.close();
     await sandbox.killAll();
     try {
       await redis.quit();

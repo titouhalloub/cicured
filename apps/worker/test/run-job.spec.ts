@@ -80,6 +80,9 @@ function makeDeps(options: {
     launched: [] as unknown[],
     extractCount: 0,
     mintedWith: [] as number[],
+    attached: [] as Array<{ containerId: string; runId: string }>,
+    stops: 0,
+    published: [] as unknown[],
   };
 
   const handle: SandboxHandle = {
@@ -117,6 +120,20 @@ function makeDeps(options: {
       return TOKEN;
     },
     logger: createLogger("run-job-test"),
+    publisher: {
+      publish: async (_runId, event) => {
+        calls.published.push(event);
+      },
+      close: async () => undefined,
+    },
+    attach: async (input) => {
+      calls.attached.push(input);
+      return {
+        stop: async () => {
+          calls.stops += 1;
+        },
+      };
+    },
   };
 
   return { deps, calls, handle };
@@ -262,5 +279,43 @@ describe("run job exit-code matrix (Spec §2)", () => {
 
     expect(result).toBeNull();
     expect(calls.launched).toHaveLength(0);
+  });
+
+  it("streams logs: attaches, stops before extraction, then publishes the end event", async () => {
+    const { deps, calls } = makeDeps({ wait: { exitCode: 1, timedOut: false } });
+
+    await createRunJob(deps)(RUN_ID);
+
+    expect(calls.attached).toEqual([{ containerId: "container-1", runId: RUN_ID }]);
+    expect(calls.stops).toBe(1);
+    // The end event carries the final status so a client needs no 2nd request.
+    expect(calls.published).toEqual([
+      { type: "end", runId: RUN_ID, exitCode: 1, status: "failed" },
+    ]);
+  });
+
+  it("publishes an end event even when the run blows up", async () => {
+    const { deps, calls } = makeDeps({ wait: { exitCode: 0, timedOut: false } });
+    deps.mintToken = async () => {
+      throw new Error("GitHub is down");
+    };
+
+    await expect(createRunJob(deps)(RUN_ID)).rejects.toThrow("GitHub is down");
+    expect(calls.published).toEqual([
+      { type: "end", runId: RUN_ID, exitCode: null, status: "runner_crash" },
+    ]);
+  });
+
+  it("does not fail the run when publishing the end event fails", async () => {
+    const { deps } = makeDeps({ wait: { exitCode: 1, timedOut: false } });
+    deps.publisher = {
+      publish: async () => {
+        throw new Error("redis down");
+      },
+      close: async () => undefined,
+    };
+
+    const result = await createRunJob(deps)(RUN_ID);
+    expect(result).toMatchObject({ status: "failed", exitCode: 1 });
   });
 });

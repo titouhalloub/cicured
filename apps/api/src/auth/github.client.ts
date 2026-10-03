@@ -1,7 +1,7 @@
 import { createSign } from "node:crypto";
 import { BadGatewayException, Injectable, ServiceUnavailableException } from "@nestjs/common";
 import type { RepoSummary } from "@sft/schemas";
-import type { AppConfig } from "../config/app-config.service";
+import { AppConfig } from "../config/app-config.service";
 
 interface GithubUserResponse {
   id: number;

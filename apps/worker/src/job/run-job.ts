@@ -9,8 +9,10 @@ import { decryptInstallationId } from "../common/crypto";
 import { registerSecret, unregisterSecret, type WorkerLogger } from "../common/secrets";
 import type { WorkerEnv } from "../env";
 import type { ExtractedReport } from "../report/handler";
+import type { LogStreamHandle } from "../logs/attach";
+import type { LogPublisher } from "../logs/publisher";
 import type { RunRepository } from "../run-repository";
-import type { SandboxHandle, SandboxLauncher } from "../sandbox/launcher";
+import type { SandboxHandle, SandboxLauncher, SandboxWaitResult } from "../sandbox/launcher";
 
 export interface ReportExtractionRequest {
   containerId: string;
@@ -22,6 +24,12 @@ export type ReportExtractor = (
   request: ReportExtractionRequest,
 ) => Promise<ExtractedReport | null>;
 
+/** Narrow seam so the job can be tested without Docker or Redis. */
+export type AttachFn = (input: {
+  containerId: string;
+  runId: string;
+}) => Promise<LogStreamHandle>;
+
 export interface RunJobDeps {
   env: WorkerEnv;
   repository: RunRepository;
@@ -29,6 +37,9 @@ export interface RunJobDeps {
   extractReport: ReportExtractor;
   mintToken: (installationId: number) => Promise<string>;
   logger: WorkerLogger;
+  /** M2b-1: live log fan-out. */
+  publisher: LogPublisher;
+  attach: AttachFn;
 }
 
 export interface RunJobResult {
@@ -54,7 +65,7 @@ function buildMinutes(startedAt: Date, finishedAt: Date): number {
 }
 
 /**
- * Maps the container outcome onto a run outcome (Spec §2 exit-code semantics):
+ * Maps a finished container's exit status onto a run outcome (Spec §2):
  *
  *   timed out      -> timeout       (detected around the runner, no report parse)
  *   exit 0         -> success       (report parsed)
@@ -65,12 +76,12 @@ function buildMinutes(startedAt: Date, finishedAt: Date): number {
  * without the artifact there is nothing for the parser to consume, and the run
  * must not be reported as a plain task failure.
  */
-async function resolveOutcome(
+async function classifyOutcome(
   deps: RunJobDeps,
   handle: SandboxHandle,
+  result: SandboxWaitResult,
   runId: string,
 ): Promise<Outcome> {
-  const result = await handle.waitFor(deps.env.SFT_DEADLINE_BUDGET_MS);
   if (result.timedOut) {
     return { status: "timeout", exitCode: null, failureKind: "timeout" };
   }
@@ -90,6 +101,24 @@ async function resolveOutcome(
     failureKind: failureKindForExitCode(exitCode),
     reportPath: extracted.path,
   };
+}
+
+/**
+ * Publishes the terminal event so SSE clients can leave their streaming state
+ * without a second request. Best-effort by contract: a Redis hiccup must never
+ * turn a successful run into a failed one.
+ */
+async function publishEnd(
+  deps: RunJobDeps,
+  runId: string,
+  status: RunStatus,
+  exitCode: number | null,
+): Promise<void> {
+  try {
+    await deps.publisher.publish(runId, { type: "end", runId, exitCode, status });
+  } catch (error) {
+    deps.logger.child({ runId }).error("could not publish the log end event", error);
+  }
 }
 
 /**
@@ -123,7 +152,20 @@ export function createRunJob(deps: RunJobDeps): RunJob {
 
     let token: string | null = null;
     let handle: SandboxHandle | null = null;
+    let logStream: LogStreamHandle | null = null;
     let finalized = false;
+
+    /** Idempotent: safe after the tail has already been drained. */
+    const stopLogs = async (): Promise<void> => {
+      if (!logStream) return;
+      const stream = logStream;
+      logStream = null;
+      try {
+        await stream.stop();
+      } catch (error) {
+        logger.error("could not stop the log stream", error);
+      }
+    };
 
     try {
       const installationId = decryptInstallationId(
@@ -145,7 +187,15 @@ export function createRunJob(deps: RunJobDeps): RunJob {
         token: minted,
       });
 
-      const outcome = await resolveOutcome(deps, handle, runId);
+      // M2b-1: start tapping the container's output. Docker replays the whole
+      // log on attach, so nothing logged before this point is missed.
+      logStream = await deps.attach({ containerId: handle.containerId, runId });
+
+      const waitResult = await handle.waitFor(deps.env.SFT_DEADLINE_BUDGET_MS);
+      // Drain the tail before extracting the report.
+      await stopLogs();
+
+      const outcome = await classifyOutcome(deps, handle, waitResult, runId);
       assertRunStatusTransition("running", outcome.status);
       const finishedAt = new Date();
       await deps.repository.finalizeRun(runId, {
@@ -156,6 +206,8 @@ export function createRunJob(deps: RunJobDeps): RunJob {
         buildMinutes: buildMinutes(startedAt, finishedAt),
       });
       finalized = true;
+      // Only now, so the client learns the final status from the stream itself.
+      await publishEnd(deps, runId, outcome.status, outcome.exitCode);
       logger.info(
         `run finished status=${outcome.status} exit=${outcome.exitCode ?? "none"} report=${outcome.reportPath ?? "none"}`,
       );
@@ -170,9 +222,12 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       if (!finalized) {
         await markRunnerCrash(deps, runId, startedAt);
       }
+      // The row says runner_crash now; tell the clients, then fail the job.
+      await publishEnd(deps, runId, "runner_crash", null);
       logger.error("run failed before completion", error);
       throw error;
     } finally {
+      await stopLogs();
       if (handle) {
         try {
           await handle.remove();

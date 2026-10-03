@@ -5,9 +5,9 @@ import {
   type ExecutionContext,
 } from "@nestjs/common";
 import { parseCookies } from "../common/cookies";
-import type { UsersService } from "../users/users.service";
+import { UsersService } from "../users/users.service";
 import type { AuthenticatedRequest } from "./authenticated-request";
-import type { SessionService } from "./session.service";
+import { SessionService } from "./session.service";
 import { SESSION_COOKIE_NAME } from "./session.service";
 
 /** Requires a valid session cookie and loads the user on every request. */

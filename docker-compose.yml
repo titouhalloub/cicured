@@ -1,5 +1,6 @@
 # SFT-Dev local infrastructure (Spec §14 M1 / §0 "Queue: BullMQ on Redis 7").
-# Postgres 16 + Redis 7 only - app services run on the host during M1.
+# Postgres 16 + Redis 7 + Silo (S3-compatible object storage) - app services
+# run on the host.
 name: sft-dev
 
 services:
@@ -35,30 +36,39 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:latest
+    # SILO is the Pigsty-maintained fork of the archived MinIO server.
+    # minio/minio, quay.io/minio/minio, and pgsty/minio are all replaced by
+    # docker.io/pgsty/silo. Same S3 API, same MINIO_* env vars, same endpoints.
+    image: pgsty/silo:RELEASE.2026-09-16T00-00-00Z
+    restart: unless-stopped
     ports:
       - "9000:9000"
       - "9001:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-    command: server /data --console-address ":9001"
+    command: server /data --address ":9000" --console-address ":9001"
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # silo binary ships its own healthcheck subcommand; no mc needed.
+      test: ["CMD", "silo", "healthcheck", "ready"]
       interval: 5s
       timeout: 3s
       retries: 10
 
   minio-init:
-    image: minio/mc:latest
+    # Shares MinIO's network namespace so localhost:9000 works inside this
+    # container. Workaround for the GitHub Codespaces bug that forces the
+    # primary container into host networking but not siblings.
+    image: pgsty/mc:latest
+    network_mode: "service:minio"
     depends_on:
       minio:
         condition: service_started
     entrypoint: >
       /bin/sh -c "
-        until mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin}; do sleep 1; done;
+        until mc alias set local http://localhost:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin}; do sleep 1; done;
         mc mb --ignore-existing local/cicured-logs;
         echo 'minio-init done';
       "

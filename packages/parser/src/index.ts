@@ -1,31 +1,42 @@
-import { PARSER_LIMITS } from "@sft/schemas";
+import { PARSER_LIMITS, type SftReportV2 } from "@sft/schemas";
+import { computeFingerprint } from "./fingerprint";
+import { parseTask } from "./parsers/index";
+import type { ParsedFinding } from "./types";
+
+export * from "./types";
+export { bucketLine, computeFingerprint, normalizeMessage } from "./fingerprint";
+export { parseTsc } from "./parsers/tsc";
+export { parseTask } from "./parsers/index";
 
 /**
- * Deterministic parser — M1 scaffold only (Spec §11: parsers land in M3).
- *
- * M3 will fill this in: validate `sft-report.json` with `parseSftReport`, then
- * classify tsc / eslint / jest-vitest / next-build output into `Finding`s with
- * locked `rule_id` formats and stable fingerprints. No LLM code touches this
- * package (Spec §4 step 8: deterministic first).
+ * Deterministic findings parser (Spec §4 step 8: deterministic first, no
+ * LLM). tsc parsing + fingerprints land in M3a; eslint / jest-vitest /
+ * next-build parsers land in M3b.
  */
 export const PARSER_PACKAGE_VERSION = "0.1.0";
 
-export class ParserNotImplementedError extends Error {
-  constructor() {
-    super(
-      "packages/parser is an M1 scaffold; deterministic parsers land in M3 (Spec §11)",
-    );
-    this.name = "ParserNotImplementedError";
-  }
-}
-
-/** Re-exported so the M3 implementation and its callers share one cap source. */
+/** Re-exported so callers and tests share one cap source with @sft/schemas. */
 export { PARSER_LIMITS };
 
+/** A parsed finding with its locked Spec §5 fingerprint attached. */
+export interface FindingsWithFingerprint extends ParsedFinding {
+  fingerprint: string;
+}
+
 /**
- * Placeholder for the M3 entry point: `parseReport(report) -> Finding[]`.
- * Deliberately throws so nothing can silently depend on unfinished parsing.
+ * Parses every task of a validated `sft-report.json` and attaches a
+ * fingerprint to each finding. Never throws: any malformed input yields [].
  */
-export function parseReport(_report: unknown): never {
-  throw new ParserNotImplementedError();
+export function parseReport(report: SftReportV2): FindingsWithFingerprint[] {
+  try {
+    const findings: FindingsWithFingerprint[] = [];
+    for (const task of report.tasks) {
+      for (const finding of parseTask(task)) {
+        findings.push({ ...finding, fingerprint: computeFingerprint(finding) });
+      }
+    }
+    return findings;
+  } catch {
+    return [];
+  }
 }

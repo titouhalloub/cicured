@@ -1,0 +1,1 @@
+apps/api/src/auth/github.client.ts(87,14): error TS2339: Property 'clientId' does not exist on type 'AppConfig'.

@@ -1,0 +1,7 @@
+apps/api/src/foo.ts(12,5): error TS2304: Cannot find name 'bar'.
+apps/api/src/foo.ts(20,10): error TS2345: Argument of type 'string' is not assignable to parameter of type 'number'.
+    The expected type comes from parameter 'n' at line 15.
+apps/web/src/App.tsx(4,1): warning TS6385: 'useEffect' is deprecated.
+packages/schemas/src/logs.ts(88,3): error TS1135: Argument expression expected.
+packages/parser/src/index.ts(7,26): error TS2307: Cannot find module './missing' or its corresponding type declarations.
+apps/api/src/config/env.ts(41,10): error TS2339: Property 'webhookSecret' does not exist on type 'AppEnv'.

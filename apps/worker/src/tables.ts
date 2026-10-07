@@ -1,5 +1,13 @@
 import { FAILURE_KINDS, RUN_STATUSES, RUN_TRIGGERS } from "@sft/schemas";
-import { integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  bigint,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 /**
  * The worker only ever reads/updates two tables, so it declares the columns it
@@ -37,7 +45,29 @@ export const runs = pgTable("runs", {
   startedAt: timestamp("started_at", { withTimezone: true }),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
   buildMinutes: integer("build_minutes"),
+  s3_log_key: text("s3_log_key"),
+});
+
+/**
+ * Log archive segment metadata (mirrors apps/api/src/db/tables.ts `logs`).
+ * Postgres never stores log bodies — this table exists so TTL purges and SSE
+ * replays can find the S3 segments. The worker inserts one row per non-empty
+ * stream (sequence 0) when it finalizes a run.
+ */
+export const logStreamEnum = pgEnum("log_stream", ["stdout", "stderr"]);
+
+export const logs = pgTable("logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  runId: uuid("run_id")
+    .notNull()
+    .references(() => runs.id, { onDelete: "cascade" }),
+  stream: logStreamEnum("stream").notNull(),
+  sequence: integer("sequence").notNull(),
+  s3Key: text("s3_key").notNull(),
+  byteSize: bigint("byte_size", { mode: "number" }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type WorkerProjectRow = typeof projects.$inferSelect;
 export type WorkerRunRow = typeof runs.$inferSelect;
+export type WorkerLogRow = typeof logs.$inferSelect;

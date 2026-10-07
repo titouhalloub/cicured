@@ -11,6 +11,8 @@ const VALID = {
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   GITHUB_APP_ID: "123456",
   GITHUB_APP_PRIVATE_KEY: "-----BEGIN RSA PRIVATE KEY-----\nx\n-----END RSA PRIVATE KEY-----",
+  S3_ACCESS_KEY_ID: "test-access-key",
+  S3_SECRET_ACCESS_KEY: "test-secret-key",
 };
 
 describe("worker env (mirrors apps/api/src/config/env.ts)", () => {

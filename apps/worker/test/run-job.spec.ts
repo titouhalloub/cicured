@@ -12,6 +12,7 @@ import type {
   SandboxWaitResult,
 } from "../src/sandbox/launcher";
 import type { ExtractedReport } from "../src/report/handler";
+import type { FlushResult, LogArchiver } from "../src/logs/archiver";
 import { createLogger } from "../src/common/secrets";
 import { makeEnv, TEST_ENCRYPTION_KEY } from "./test-utils";
 
@@ -46,6 +47,7 @@ function makeRun(status: RunWithProject["run"]["status"] = "queued"): RunWithPro
       startedAt: null,
       finishedAt: null,
       buildMinutes: null,
+      s3_log_key: null,
     },
     project: {
       id: "22222222-2222-4222-8222-222222222222",
@@ -83,6 +85,9 @@ function makeDeps(options: {
     attached: [] as Array<{ containerId: string; runId: string }>,
     stops: 0,
     published: [] as unknown[],
+    flushes: 0,
+    flushedFor: [] as string[],
+    flushResult: { s3Key: "logs/test-run", stdoutBytes: 100, stderrBytes: 50 } as FlushResult,
   };
 
   const handle: SandboxHandle = {
@@ -126,8 +131,18 @@ function makeDeps(options: {
       },
       close: async () => undefined,
     },
+    createArchiver: (runId: string): LogArchiver => {
+      calls.flushedFor.push(runId);
+      return {
+        append: () => undefined,
+        flush: async () => {
+          calls.flushes += 1;
+          return calls.flushResult;
+        },
+      };
+    },
     attach: async (input) => {
-      calls.attached.push(input);
+      calls.attached.push({ containerId: input.containerId, runId: input.runId });
       return {
         stop: async () => {
           calls.stops += 1;
@@ -317,5 +332,47 @@ describe("run job exit-code matrix (Spec §2)", () => {
 
     const result = await createRunJob(deps)(RUN_ID);
     expect(result).toMatchObject({ status: "failed", exitCode: 1 });
+  });
+
+  it("flushes archived logs before extracting the report and stamps s3LogKey", async () => {
+    const { deps, calls } = makeDeps({ wait: { exitCode: 0, timedOut: false } });
+    const order: string[] = [];
+    const originalExtract = deps.extractReport;
+    deps.extractReport = async (request) => {
+      order.push("extract");
+      return originalExtract(request);
+    };
+    const originalCreateArchiver = deps.createArchiver;
+    deps.createArchiver = (runId) => {
+      const archiver = originalCreateArchiver(runId);
+      const originalFlush = archiver.flush.bind(archiver);
+      return {
+        append: archiver.append.bind(archiver),
+        flush: async () => {
+          order.push("flush");
+          return originalFlush();
+        },
+      };
+    };
+
+    await createRunJob(deps)(RUN_ID);
+
+    expect(order).toEqual(["flush", "extract"]);
+    expect(calls.flushedFor).toEqual([RUN_ID]);
+    expect(calls.finalized.at(-1)).toMatchObject({
+      status: "success",
+      s3LogKey: "logs/test-run",
+      logArchive: { stdoutBytes: 100, stderrBytes: 50 },
+    });
+  });
+
+  it("does not fail the run when the S3 flush fails (null key, no archive rows)", async () => {
+    const { deps, calls } = makeDeps({ wait: { exitCode: 0, timedOut: false } });
+    calls.flushResult = { s3Key: null, stdoutBytes: 0, stderrBytes: 0 };
+
+    const result = await createRunJob(deps)(RUN_ID);
+
+    expect(result).toMatchObject({ status: "success", exitCode: 0 });
+    expect(calls.finalized.at(-1)).toMatchObject({ s3LogKey: null, logArchive: null });
   });
 });

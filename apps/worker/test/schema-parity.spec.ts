@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 // renamed or dropped in the API, this test fails instead of the worker
 // silently querying a column that no longer exists.
 import { projects as apiProjects } from "../../api/src/db/schema";
-import { runs as apiRuns } from "../../api/src/db/tables";
-import { projects, runs } from "../src/tables";
+import { logs as apiLogs, runs as apiRuns } from "../../api/src/db/tables";
+import { logs, projects, runs } from "../src/tables";
 
 /**
  * The worker declares only the columns it touches instead of importing the whole
@@ -44,6 +44,7 @@ describe("worker table parity with apps/api", () => {
       "finished_at",
       "id",
       "project_id",
+      "s3_log_key",
       "started_at",
       "status",
       "trigger",
@@ -53,6 +54,22 @@ describe("worker table parity with apps/api", () => {
       "id",
       "installation_id_enc",
       "repo_full_name",
+    ]);
+  });
+
+  it("declares every logs column it needs with the same DB names", () => {
+    const api = new Set(columnNames(apiLogs));
+    for (const name of columnNames(logs)) {
+      expect(api.has(name)).toBe(true);
+    }
+    expect(columnNames(logs)).toEqual([
+      "byte_size",
+      "created_at",
+      "id",
+      "run_id",
+      "s3_key",
+      "sequence",
+      "stream",
     ]);
   });
 });

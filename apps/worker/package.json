@@ -12,6 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.782.0",
+    "@aws-sdk/s3-request-presigner": "^3.782.0",
     "@sft/schemas": "workspace:*",
     "bullmq": "^6.3.9",
     "dockerode": "^5.0.1",

@@ -6,10 +6,12 @@ import { assertRunnerArtifact, loadDotEnvFile, loadEnv } from "./env";
 import { mintInstallationToken } from "./github/token";
 import { createRunJob } from "./job/run-job";
 import { attachAndStream } from "./logs/attach";
+import { createLogArchiver } from "./logs/archiver";
 import { createLogPublisher } from "./logs/publisher";
 import { extractAndValidateReport } from "./report/handler";
 import { createRunsWorker } from "./queue/runs.worker";
 import { createRunRepository } from "./run-repository";
+import { createS3Client } from "./logs/s3-client";
 import { createSandboxLauncher, type DockerLike } from "./sandbox/launcher";
 
 /**
@@ -34,6 +36,9 @@ async function main(): Promise<void> {
   // PUBLISH is an ordinary command, so the BullMQ client can carry the log
   // traffic; only the API needs a dedicated subscriber connection.
   const logPublisher = createLogPublisher(redis, env.SFT_LOG_CHANNEL_PREFIX);
+  // Shared S3 client - the archiver reuses this single instance. Same config
+  // as the API's presigner so presigned signatures never diverge (M2b-2).
+  const s3Client = createS3Client(env);
 
   const processRun = createRunJob({
     env,
@@ -41,8 +46,9 @@ async function main(): Promise<void> {
     sandbox,
     logger,
     publisher: logPublisher,
-    attach: ({ containerId, runId }) =>
-      attachAndStream(docker, containerId, runId, logPublisher, logger),
+    createArchiver: (runId) => createLogArchiver({ s3Client, bucket: env.S3_BUCKET, runId, logger }),
+    attach: ({ containerId, runId, archiver }) =>
+      attachAndStream(docker, containerId, runId, logPublisher, logger, archiver),
     mintToken: (installationId) => mintInstallationToken(installationId, env),
     extractReport: ({ containerId, runId }) =>
       extractAndValidateReport(

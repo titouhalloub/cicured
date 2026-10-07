@@ -26,6 +26,8 @@ export function makeEnv(overrides: Partial<Record<keyof WorkerEnv, unknown>> = {
     SFT_TASK_TIMEOUT_MS: 600_000,
     SFT_DEADLINE_BUDGET_MS: 900_000,
     SFT_RUNNER_HOST_PATH: "/host/path/packages/runner/sft-dev.mjs",
+    S3_ACCESS_KEY_ID: "test-access-key",
+    S3_SECRET_ACCESS_KEY: "test-secret-key",
     ...overrides,
   }) as WorkerEnv;
 }

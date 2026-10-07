@@ -13,6 +13,8 @@ export default defineConfig({
       SFT_ENCRYPTION_KEY:
         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       GITHUB_API_BASE: "https://api.github.com",
+      S3_ACCESS_KEY_ID: "test-access-key",
+      S3_SECRET_ACCESS_KEY: "test-secret-key",
     },
   },
   plugins: [

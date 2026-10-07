@@ -13,6 +13,7 @@ import type { LogStreamHandle } from "../logs/attach";
 import type { LogPublisher } from "../logs/publisher";
 import type { RunRepository } from "../run-repository";
 import type { SandboxHandle, SandboxLauncher, SandboxWaitResult } from "../sandbox/launcher";
+import type { LogArchiver } from "../logs/archiver";
 
 export interface ReportExtractionRequest {
   containerId: string;
@@ -28,6 +29,7 @@ export type ReportExtractor = (
 export type AttachFn = (input: {
   containerId: string;
   runId: string;
+  archiver: LogArchiver;
 }) => Promise<LogStreamHandle>;
 
 export interface RunJobDeps {
@@ -40,6 +42,8 @@ export interface RunJobDeps {
   /** M2b-1: live log fan-out. */
   publisher: LogPublisher;
   attach: AttachFn;
+  /** M2b-2: log archiver for S3 uploads. Run-scoped via createArchiver. */
+  createArchiver: (runId: string) => LogArchiver;
 }
 
 export interface RunJobResult {
@@ -189,11 +193,17 @@ export function createRunJob(deps: RunJobDeps): RunJob {
 
       // M2b-1: start tapping the container's output. Docker replays the whole
       // log on attach, so nothing logged before this point is missed.
-      logStream = await deps.attach({ containerId: handle.containerId, runId });
+      const archiver = deps.createArchiver(runId);
+      logStream = await deps.attach({ containerId: handle.containerId, runId, archiver });
 
       const waitResult = await handle.waitFor(deps.env.SFT_DEADLINE_BUDGET_MS);
       // Drain the tail before extracting the report.
       await stopLogs();
+
+      // M2b-2: flush buffered logs to S3 before report extraction. The
+      // archiver never throws; on failure s3Key is null and the run continues
+      // (report extraction decides the outcome, not the log upload).
+      const flushed = await archiver.flush();
 
       const outcome = await classifyOutcome(deps, handle, waitResult, runId);
       assertRunStatusTransition("running", outcome.status);
@@ -204,6 +214,11 @@ export function createRunJob(deps: RunJobDeps): RunJob {
         failureKind: outcome.failureKind,
         finishedAt,
         buildMinutes: buildMinutes(startedAt, finishedAt),
+        s3LogKey: flushed.s3Key,
+        logArchive:
+          flushed.stdoutBytes > 0 || flushed.stderrBytes > 0
+            ? { stdoutBytes: flushed.stdoutBytes, stderrBytes: flushed.stderrBytes }
+            : null,
       });
       finalized = true;
       // Only now, so the client learns the final status from the stream itself.

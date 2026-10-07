@@ -48,6 +48,15 @@ export const EnvSchema = z.object({
 
   /** Host path of the pinned runner, bind-mounted read-only into the sandbox. */
   SFT_RUNNER_HOST_PATH: z.string().min(1).default(DEFAULT_RUNNER_HOST_PATH),
+
+  // ─── S3 / MinIO log archival (M2b-2) ─────────────────────────────────────
+  // Same code path for MinIO (local) and AWS S3 (prod). MinIO requires
+  // forcePathStyle: true; the endpoint is only set when S3_ENDPOINT is set.
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().min(1).default("us-east-1"),
+  S3_ACCESS_KEY_ID: z.string().min(1, "S3_ACCESS_KEY_ID is required"),
+  S3_SECRET_ACCESS_KEY: z.string().min(1, "S3_SECRET_ACCESS_KEY is required"),
+  S3_BUCKET: z.string().min(1).default("cicured-logs"),
 });
 
 export type WorkerEnv = z.infer<typeof EnvSchema>;

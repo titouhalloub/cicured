@@ -3,6 +3,7 @@ import type { LogStream } from "@sft/schemas";
 import type { WorkerLogger } from "../common/secrets";
 import type { DockerLike } from "../sandbox/launcher";
 import type { LogPublisher } from "./publisher";
+import type { LogArchiver } from "./archiver";
 
 /**
  * Docker's multiplexed stream framing: an 8-byte header per frame -
@@ -70,6 +71,8 @@ export interface LogStreamHandle {
  *
  * Never throws: a broken log stream degrades to "no live logs", never to a
  * failed run (M2b-1 is best-effort observability, not part of the contract).
+ *
+ * If an archiver is provided, chunks are also buffered for S3 upload.
  */
 export async function attachAndStream(
   docker: DockerLike,
@@ -77,6 +80,7 @@ export async function attachAndStream(
   runId: string,
   publisher: LogPublisher,
   logger: WorkerLogger,
+  archiver?: LogArchiver,
 ): Promise<LogStreamHandle> {
   const log = logger.child({ containerId });
 
@@ -107,6 +111,8 @@ export async function attachAndStream(
       publisher.publish(runId, event).catch((error: unknown) => {
         log.error("could not publish log chunk", error);
       });
+      // Also archive if we have an archiver
+      archiver?.append(stream, payload, seq);
     },
     onUnknownStream: (streamType) => {
       if (warnedUnknown) return;

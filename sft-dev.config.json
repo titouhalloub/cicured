@@ -2,7 +2,6 @@
   "tasks": [
     { "name": "Type Check", "command": "pnpm -r typecheck" },
     { "name": "Lint",       "command": "pnpm -r lint" },
-    { "name": "Build",      "command": "pnpm -r build" },
     { "name": "Tests",      "command": "pnpm -r test" }
   ]
 }

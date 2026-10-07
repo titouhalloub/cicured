@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { Queue } from "bullmq";
-import { RUNS_QUEUE } from "./queue.module";
+import { RUNS_QUEUE } from "./queue.constants";
 
 export const RUN_JOB_NAME = "run";
 

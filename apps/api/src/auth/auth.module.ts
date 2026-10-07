@@ -10,6 +10,6 @@ import { SessionService } from "./session.service";
   imports: [UsersModule],
   controllers: [AuthController],
   providers: [AuthService, GitHubClient, SessionService, SessionGuard],
-  exports: [GitHubClient, SessionService, SessionGuard],
+  exports: [GitHubClient, SessionService, SessionGuard, UsersModule],
 })
 export class AuthModule {}

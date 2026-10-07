@@ -2,9 +2,8 @@ import { Global, Inject, Module, type OnModuleDestroy } from "@nestjs/common";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import { AppConfig } from "../config/app-config.service";
-
-export const REDIS = "REDIS_CLIENT";
-export const RUNS_QUEUE = "RUNS_QUEUE";
+import { RunsQueue } from "./runs-queue.service";
+import { REDIS, RUNS_QUEUE } from "./queue.constants";
 
 /**
  * Redis + BullMQ producers (Spec §0: "Queue: BullMQ on Redis 7"). The worker
@@ -14,6 +13,10 @@ export const RUNS_QUEUE = "RUNS_QUEUE";
 @Global()
 @Module({
   providers: [
+    // RunsQueue wraps RUNS_QUEUE for the services that enqueue runs. It is
+    // provided and exported here so any module can inject it by class token;
+    // it was previously @Injectable but registered in no module at all.
+    RunsQueue,
     {
       provide: REDIS,
       useFactory: (config: AppConfig) =>
@@ -37,7 +40,7 @@ export const RUNS_QUEUE = "RUNS_QUEUE";
       inject: [AppConfig, REDIS],
     },
   ],
-  exports: [RUNS_QUEUE, REDIS],
+  exports: [RUNS_QUEUE, REDIS, RunsQueue],
 })
 export class QueueModule implements OnModuleDestroy {
   constructor(

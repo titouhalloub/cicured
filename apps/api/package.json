@@ -4,8 +4,8 @@
   "private": true,
   "description": "SFT-Dev REST API (NestJS) - M1 foundation",
   "scripts": {
-    "start": "tsx src/main.ts",
-    "dev": "tsx watch src/main.ts",
+    "start": "node -r @swc-node/register src/main.ts",
+    "dev": "node --watch -r @swc-node/register src/main.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
@@ -34,6 +34,7 @@
     "@types/node": "^24.19.0",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
+    "@swc-node/register": "^1.10.1",
     "drizzle-kit": "^0.31.11",
     "eslint": "^10.11.0",
     "supertest": "^7.3.0",

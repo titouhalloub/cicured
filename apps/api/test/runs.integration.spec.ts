@@ -11,7 +11,7 @@ import { SESSION_COOKIE_NAME, SessionService } from "../src/auth/session.service
 import { CryptoService } from "../src/common/crypto.service";
 import { DRIZZLE, projects, runs, users, type Database } from "../src/db";
 import { resolveMigrationsFolder, runMigrations } from "../src/db/migrate";
-import { RUNS_QUEUE } from "../src/queue/queue.module";
+import { RUNS_QUEUE } from "../src/queue/queue.constants";
 
 const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgres://sft:sft@localhost:5432/sft_dev";

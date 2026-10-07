@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import type { Response } from "express";
 import type IORedis from "ioredis";
 import { DRIZZLE, type Database } from "../db";
-import { REDIS } from "../queue/queue.module";
+import { REDIS } from "../queue/queue.constants";
 
 const HEALTH_TIMEOUT_MS = 2_000;
 

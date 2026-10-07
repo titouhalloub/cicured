@@ -14,6 +14,8 @@
     "db:migrate": "tsx src/db/migrate-cli.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1146.0",
+    "@aws-sdk/s3-request-presigner": "^3.1146.0",
     "@nestjs/common": "^12.1.1",
     "@nestjs/core": "^12.1.1",
     "@nestjs/platform-express": "^12.1.1",
@@ -29,12 +31,12 @@
   },
   "devDependencies": {
     "@nestjs/testing": "^12.1.1",
+    "@swc-node/register": "^1.10.1",
     "@swc/core": "^1.16.2",
     "@types/express": "^5.0.6",
     "@types/node": "^24.19.0",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
-    "@swc-node/register": "^1.10.1",
     "drizzle-kit": "^0.31.11",
     "eslint": "^10.11.0",
     "supertest": "^7.3.0",

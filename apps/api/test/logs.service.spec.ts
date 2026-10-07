@@ -1,9 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import type { LogEvent } from "@sft/schemas";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { S3Client } from "@aws-sdk/client-s3";
 import { LogsService } from "../src/logs/logs.service";
+import type { UserRow } from "../src/db";
+import type { RunsService } from "../src/runs/runs.service";
 import { makeConfig } from "./test-utils";
 
+vi.mock("@aws-sdk/s3-request-presigner", () => ({
+  getSignedUrl: vi.fn(async () => "https://signed.example/combined.log"),
+}));
+
 const RUN_ID = "11111111-1111-4111-8111-111111111111";
+const USER = { id: "44444444-4444-4444-8444-444444444444" } as UserRow;
 
 function chunk(seq: number): LogEvent {
   return {
@@ -28,8 +37,20 @@ function redisDouble() {
   };
 }
 
+/** Stands in for the injected S3 client; getSignedUrl itself is mocked above. */
+function s3Double(): S3Client {
+  return {} as S3Client;
+}
+
+/** Stands in for RunsService with a run whose archive prefix is fixed. */
+function runsDouble(s3LogKey: string | null): RunsService {
+  return {
+    getOwnedRun: vi.fn(async () => ({ s3LogKey })),
+  } as unknown as RunsService;
+}
+
 function makeService(redis: ReturnType<typeof redisDouble>) {
-  const service = new LogsService(makeConfig());
+  const service = new LogsService(s3Double(), makeConfig(), runsDouble(null));
   // Test seam: the service builds its own client lazily, so we hand it a
   // double instead of connecting to Redis.
   (service as unknown as { client: unknown }).client = redis;
@@ -85,7 +106,11 @@ describe("LogsService", () => {
 
   it("honours a custom channel prefix", async () => {
     const redis = redisDouble();
-    const service = new LogsService(makeConfig({ SFT_LOG_CHANNEL_PREFIX: "custom:" }));
+    const service = new LogsService(
+      s3Double(),
+      makeConfig({ SFT_LOG_CHANNEL_PREFIX: "custom:" }),
+      runsDouble(null),
+    );
     (service as unknown as { client: unknown }).client = redis;
 
     const session = subscribeWithAbort(service, RUN_ID);
@@ -171,5 +196,68 @@ describe("LogsService", () => {
 
     expect((await next).value).toEqual(chunk(7));
     await session.close();
+  });
+
+  describe("getPresignedLogUrl", () => {
+    it("returns a presigned URL when s3LogKey is set", async () => {
+      const service = new LogsService(
+        s3Double(),
+        makeConfig(),
+        runsDouble("logs/abc"),
+      );
+
+      const url = await service.getPresignedLogUrl(USER, RUN_ID);
+
+      expect(url).toMatch(/^http/);
+    });
+
+    it("returns null when s3LogKey is null", async () => {
+      const service = new LogsService(
+        s3Double(),
+        makeConfig(),
+        runsDouble(null),
+      );
+
+      const url = await service.getPresignedLogUrl(USER, RUN_ID);
+
+      expect(url).toBeNull();
+    });
+
+    it("uses <s3LogKey>/combined.log as the object key", async () => {
+      const signed = vi.mocked(getSignedUrl);
+      signed.mockClear();
+      const service = new LogsService(
+        s3Double(),
+        makeConfig(),
+        runsDouble("logs/abc"),
+      );
+
+      await service.getPresignedLogUrl(USER, RUN_ID);
+
+      expect(signed).toHaveBeenCalledTimes(1);
+      const cmd = signed.mock.calls[0]![1] as {
+        input: { Key: string; ResponseContentDisposition: string };
+      };
+      expect(cmd.input.Key).toBe("logs/abc/combined.log");
+    });
+
+    it("sets ResponseContentDisposition with runId in filename", async () => {
+      const signed = vi.mocked(getSignedUrl);
+      signed.mockClear();
+      const service = new LogsService(
+        s3Double(),
+        makeConfig(),
+        runsDouble("logs/abc"),
+      );
+
+      await service.getPresignedLogUrl(USER, RUN_ID);
+
+      const cmd = signed.mock.calls[0]![1] as {
+        input: { Key: string; ResponseContentDisposition: string };
+      };
+      expect(cmd.input.ResponseContentDisposition).toBe(
+        `attachment; filename="${RUN_ID}-combined.log"`,
+      );
+    });
   });
 });

@@ -3,11 +3,12 @@ import {
   Get,
   NotFoundException,
   Param,
+  Req,
   Res,
   UseGuards,
 } from "@nestjs/common";
 import { isTerminalRunStatus, type LogEnd } from "@sft/schemas";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { SessionGuard } from "../auth/session.guard";
 import type { UserRow } from "../db";
@@ -38,6 +39,7 @@ export class LogsController {
   async streamLogs(
     @CurrentUser() user: UserRow,
     @Param("id") runId: string,
+    @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     // Ownership check first: a foreign or unknown run is a 404, never a stream.
@@ -48,11 +50,21 @@ export class LogsController {
       throw new NotFoundException("run not found");
     }
 
-    writeSseHeaders(res);
-
     if (isTerminalRunStatus(run.status)) {
+      // M2b-2b: a non-SSE client asking for a finished run with an S3 archive
+      // gets a presigned download of combined.log instead of an empty frame.
+      const accept = String(req.headers.accept ?? "");
+      const wantsSse = /text\/event-stream/i.test(accept);
+      if (!wantsSse && run.s3LogKey) {
+        const url = await this.logsService.getPresignedLogUrl(user, runId);
+        if (url) {
+          res.status(302).setHeader("Location", url).end();
+          return;
+        }
+      }
       // Live-only: a finished run replays nothing, so the client is told the
       // run is over immediately.
+      writeSseHeaders(res);
       writeFrame(res, {
         type: "end",
         runId,
@@ -62,6 +74,8 @@ export class LogsController {
       res.end();
       return;
     }
+
+    writeSseHeaders(res);
 
     // D4: the run can finish between the lookup above and the subscription.
     // Re-check before subscribing so a run that ended in that window closes

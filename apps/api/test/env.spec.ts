@@ -5,6 +5,8 @@ const VALID = {
   DATABASE_URL: "postgres://sft:sft@localhost:5432/sft_dev",
   SESSION_SECRET: "0123456789abcdef0123456789abcdef",
   SFT_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef",
+  S3_ACCESS_KEY_ID: "test-access-key",
+  S3_SECRET_ACCESS_KEY: "test-secret-key",
 };
 
 describe("loadEnv (Spec §14: fail fast on bad config)", () => {

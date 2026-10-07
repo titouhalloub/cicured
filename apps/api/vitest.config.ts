@@ -22,6 +22,8 @@ export default defineConfig({
       WEB_APP_URL: "http://localhost:3000",
       GITHUB_API_BASE: "https://api.github.com",
       GITHUB_OAUTH_BASE: "https://github.com",
+      S3_ACCESS_KEY_ID: "test-access-key",
+      S3_SECRET_ACCESS_KEY: "test-secret-key",
     },
   },
   plugins: [

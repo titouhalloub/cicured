@@ -9,6 +9,8 @@ export function makeEnv(overrides: Partial<Record<keyof AppEnv, unknown>> = {}):
     SESSION_SECRET: "unit-test-session-secret-0123456789abcdef",
     SFT_ENCRYPTION_KEY:
       "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    S3_ACCESS_KEY_ID: "test-access-key",
+    S3_SECRET_ACCESS_KEY: "test-secret-key",
   });
   return { ...base, ...overrides } as AppEnv;
 }

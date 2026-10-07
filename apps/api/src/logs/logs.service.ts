@@ -1,9 +1,14 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { S3Client } from "@aws-sdk/client-s3";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import IORedis from "ioredis";
 import { LogEvent } from "@sft/schemas";
 // Value import, not `import type`: Nest resolves `AppConfig` through
 // design:paramtypes, so a type-only import would erase the class reference.
 import { AppConfig } from "../config/app-config.service";
+import type { UserRow } from "../db";
+import { RunsService } from "../runs/runs.service";
 
 type Listener = (event: LogEvent) => void;
 
@@ -30,7 +35,11 @@ export class LogsService {
   private client: IORedis | null = null;
   private readonly rooms = new Map<string, Room>();
 
-  constructor(private readonly config: AppConfig) {}
+  constructor(
+    @Inject("S3_CLIENT") private readonly s3: S3Client,
+    private readonly config: AppConfig,
+    private readonly runs: RunsService,
+  ) {}
 
   private channelFor(runId: string): string {
     return `${this.config.logChannelPrefix}${runId}`;
@@ -163,6 +172,36 @@ export class LogsService {
   /** Test/observability helper: how many clients are attached to a run. */
   refCount(runId: string): number {
     return this.rooms.get(runId)?.listeners.size ?? 0;
+  }
+
+  /**
+   * Returns a presigned GET URL for the combined log archive of a run,
+   * or null if the run has no archived logs.
+   *
+   * runs.s3_log_key is a prefix; the actual object is:
+   *   <s3_log_key>/combined.log
+   */
+  async getPresignedLogUrl(
+    user: UserRow,
+    runId: string,
+    ttlSeconds = 900,
+  ): Promise<string | null> {
+    // Ownership check first: a foreign or unknown run yields null, never a URL.
+    let run;
+    try {
+      run = await this.runs.getOwnedRun(user, runId);
+    } catch {
+      return null;
+    }
+    if (!run.s3LogKey) return null;
+
+    const command = new GetObjectCommand({
+      Bucket: this.config.env.S3_BUCKET,
+      Key: `${run.s3LogKey}/combined.log`,
+      ResponseContentDisposition: `attachment; filename="${runId}-combined.log"`,
+    });
+
+    return getSignedUrl(this.s3, command, { expiresIn: ttlSeconds });
   }
 
   async onModuleDestroy(): Promise<void> {

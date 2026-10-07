@@ -9,6 +9,7 @@ import { QueueModule } from "./queue/queue.module";
 import { ReposModule } from "./repos/repos.module";
 import { RunsModule } from "./runs/runs.module";
 import { UsersModule } from "./users/users.module";
+import { WebhooksModule } from "./webhooks/webhooks.module";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { UsersModule } from "./users/users.module";
     RunsModule,
     LogsModule,
     HealthModule,
+    WebhooksModule,
   ],
 })
 export class AppModule {}

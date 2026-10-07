@@ -4,7 +4,7 @@ import { AppModule } from "./app.module";
 import { AppConfig } from "./config/app-config.service";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const config = app.get(AppConfig);
   app.enableShutdownHooks();
   // Cookie-based sessions: the web app calls the API with credentials.

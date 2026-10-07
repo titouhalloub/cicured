@@ -87,6 +87,12 @@ describe("extractAndValidateReport", () => {
       expect(stored).toEqual(VALID_REPORT);
       expect(SftReportV2.safeParse(stored).success).toBe(true);
       // Owner-only: the report embeds untrusted build output.
+      if (process.platform === "win32") {
+        // Windows can't represent Unix owner-only permissions: fs.chmod only
+        // toggles the read-only bit and Node reports 0o666 for writable files.
+        // The 0o600 invariant is enforced on Linux, where the worker runs.
+        return;
+      }
       expect((await stat(result!.path)).mode & 0o777).toBe(0o600);
     });
   });

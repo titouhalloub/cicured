@@ -115,6 +115,13 @@ describe("createSandboxContainer (Spec §8 hardening)", () => {
       // cannot chown. "other" write is the ONLY thing that lets the entrypoint
       // copy the report out.
       expect(mode & 0o002).toBe(0o002);
+            if (process.platform === "win32") {
+        // Windows doesn't implement Unix file modes: fs.chmod only toggles the
+        // read-only bit and Node reports 0o666 for writable files regardless of
+        // the requested mode. This assertion guards a umask regression on Linux,
+        // where the worker actually runs.
+        return;
+      }
       // Guard the regression that motivated this: mkdir's `mode` argument is
       // masked by the process umask, so relying on it alone yields 0756 here.
       expect(mode).toBe(0o777);

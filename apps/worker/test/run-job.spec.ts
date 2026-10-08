@@ -1,4 +1,5 @@
 import { createCipheriv, randomBytes } from "node:crypto";
+import type { FindingsWithFingerprint } from "@sft/parser";
 import { describe, expect, it, vi } from "vitest";
 import type {
   FinalizeRunInput,
@@ -85,6 +86,7 @@ function makeDeps(options: {
     attached: [] as Array<{ containerId: string; runId: string }>,
     stops: 0,
     published: [] as unknown[],
+    insertedFindings: [] as FindingsWithFingerprint[][],
     flushes: 0,
     flushedFor: [] as string[],
     flushResult: { s3Key: "logs/test-run", stdoutBytes: 100, stderrBytes: 50 } as FlushResult,
@@ -101,6 +103,9 @@ function makeDeps(options: {
     claimRun: async () => options.claimRun ?? true,
     finalizeRun: async (_runId, input) => {
       calls.finalized.push(input);
+    },
+    insertFindings: async (_runId, findings) => {
+      calls.insertedFindings.push(findings);
     },
   };
 
@@ -374,5 +379,72 @@ describe("run job exit-code matrix (Spec §2)", () => {
 
     expect(result).toMatchObject({ status: "success", exitCode: 0 });
     expect(calls.finalized.at(-1)).toMatchObject({ s3LogKey: null, logArchive: null });
+  });
+
+  it("persists findings after report extraction", async () => {
+    const { deps, calls } = makeDeps({
+      wait: { exitCode: 1, timedOut: false },
+      report: {
+        path: "/reports/sft-report.json",
+        report: {
+          tool: "sft-dev",
+          version: 2,
+          finishedAt: "2026-09-30T12:00:00.000Z",
+          runnerError: null,
+          warnings: [],
+          summary: {
+            total: 1,
+            passed: 0,
+            failed: 1,
+            skipped: 0,
+            totalDurationMs: 10,
+          },
+          tasks: [
+            {
+              name: "Type Check",
+              command: "pnpm -r typecheck",
+              success: false,
+              exitCode: 2,
+              timedOut: false,
+              skipped: false,
+              truncated: false,
+              durationMs: 10,
+              stdout: "src/x.ts(3,7): error TS2304: Cannot find name 'bar'.\n",
+              stderr: "",
+            },
+          ],
+        },
+      },
+    });
+
+    await createRunJob(deps)(RUN_ID);
+
+    expect(calls.insertedFindings).toHaveLength(1);
+    const findings = calls.insertedFindings[0];
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      severity: "error",
+      category: "typecheck",
+      ruleId: "TS2304",
+      file: "src/x.ts",
+      line: 3,
+      col: 7,
+      message: "Cannot find name 'bar'.",
+    });
+    expect(findings[0].fingerprint).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("does not fail the run when insertFindings throws", async () => {
+    const { deps, calls } = makeDeps({ wait: { exitCode: 0, timedOut: false } });
+    deps.repository.insertFindings = async () => {
+      throw new Error("insert exploded");
+    };
+
+    const result = await createRunJob(deps)(RUN_ID);
+
+    // The report already landed; the run keeps its real status.
+    expect(result).toMatchObject({ status: "success", exitCode: 0 });
+    expect(calls.finalized).toHaveLength(1);
+    expect(calls.finalized[0]).toMatchObject({ status: "success" });
   });
 });

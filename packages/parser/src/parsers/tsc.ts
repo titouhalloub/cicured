@@ -1,9 +1,5 @@
 import type { ParsedFinding } from "../types";
-
-/** Per-stream input cap: tails beyond 2 MB are dropped (attacker-controlled output). */
-const MAX_INPUT_CHARS = 2 * 1024 * 1024;
-/** Hard cap on findings emitted per task. */
-const MAX_FINDINGS = 500;
+import { capInput, findingLimit, truncatedFinding } from "./caps";
 
 /**
  * `tsc --noEmit --pretty false` emits one line per error:
@@ -12,23 +8,6 @@ const MAX_FINDINGS = 500;
  * next indented line.
  */
 const TSC_FINDING_LINE = /^(.+?)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.*)$/;
-
-function capInput(input: string): { text: string; truncated: boolean } {
-  if (input.length <= MAX_INPUT_CHARS) return { text: input, truncated: false };
-  return { text: input.slice(0, MAX_INPUT_CHARS), truncated: true };
-}
-
-function truncatedFinding(): ParsedFinding {
-  return {
-    severity: "warning",
-    category: "typecheck",
-    ruleId: "SFT_TRUNCATED",
-    file: "<parser>",
-    line: 0,
-    col: 0,
-    message: "parser input exceeded the 2 MB cap; output beyond the cap was not parsed",
-  };
-}
 
 /**
  * Parses `tsc --pretty false` output into findings. Never throws: any input
@@ -40,7 +19,7 @@ export function parseTsc(stdout: string, stderr: string): ParsedFinding[] {
     const err = capInput(stderr ?? "");
     const truncated = out.truncated || err.truncated;
     // Reserve one slot so the synthetic truncation marker always fits.
-    const limit = truncated ? MAX_FINDINGS - 1 : MAX_FINDINGS;
+    const limit = findingLimit(truncated);
 
     const findings: ParsedFinding[] = [];
 
@@ -75,7 +54,7 @@ export function parseTsc(stdout: string, stderr: string): ParsedFinding[] {
     consume(out.text);
     consume(err.text);
 
-    if (truncated) findings.push(truncatedFinding());
+    if (truncated) findings.push(truncatedFinding("typecheck"));
     return findings;
   } catch {
     // The parser must never throw on any input.

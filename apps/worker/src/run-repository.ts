@@ -1,6 +1,10 @@
+import type { FindingsWithFingerprint } from "@sft/parser";
+import { FINDING_CATEGORIES, FINDING_SEVERITIES } from "@sft/schemas";
 import type { FailureKind, RunStatus } from "@sft/schemas";
 import { and, eq } from "drizzle-orm";
+import { integer, pgEnum, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import type { Database } from "./db";
+import { createLogger } from "./common/secrets";
 import {
   logs,
   projects,
@@ -8,6 +12,39 @@ import {
   type WorkerProjectRow,
   type WorkerRunRow,
 } from "./tables";
+
+/** Drizzle's pgEnum needs a non-empty tuple literal (mirrors the API's schema). */
+const asTuple = <T extends string>(values: readonly T[]): [T, ...T[]] =>
+  values as unknown as [T, ...T[]];
+
+export const findingSeverityEnum = pgEnum("finding_severity", asTuple(FINDING_SEVERITIES));
+export const findingCategoryEnum = pgEnum("finding_category", asTuple(FINDING_CATEGORIES));
+
+/**
+ * Mirrors apps/api/src/db/schema.ts `findings` — declared here because this
+ * module owns its own inserts (the worker table registry in ./tables is out
+ * of scope for M3b). The DB-side unique index on (run_id, fingerprint) is
+ * what makes `insertFindings` idempotent.
+ */
+export const findings = pgTable("findings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  runId: uuid("run_id")
+    .notNull()
+    .references(() => runs.id, { onDelete: "cascade" }),
+  severity: findingSeverityEnum("severity").notNull(),
+  category: findingCategoryEnum("category").notNull(),
+  ruleId: text("rule_id").notNull(),
+  file: text("file").notNull(),
+  line: integer("line").notNull(),
+  col: integer("col").notNull(),
+  message: text("message").notNull(),
+  fingerprint: text("fingerprint").notNull(),
+});
+
+/** Findings persisted per run (Spec آ§5: parser output capped per run). */
+const MAX_FINDINGS_PER_RUN = 500;
+
+const repositoryLogger = createLogger("run-repository");
 
 export interface RunWithProject {
   run: WorkerRunRow;
@@ -48,6 +85,11 @@ export interface RunRepository {
   /** `queued -> running` guarded update; false when another worker claimed it. */
   claimRun(runId: string, startedAt: Date): Promise<boolean>;
   finalizeRun(runId: string, input: FinalizeRunInput): Promise<void>;
+  /**
+   * M3b: persist parsed findings for a run. Idempotent on the unique
+   * (run_id, fingerprint) index; at most 500 rows per run.
+   */
+  insertFindings(runId: string, findings: FindingsWithFingerprint[]): Promise<void>;
 }
 
 export function createRunRepository(db: Database): RunRepository {
@@ -116,6 +158,36 @@ export function createRunRepository(db: Database): RunRepository {
             .onConflictDoNothing();
         }
       }
+    },
+
+    async insertFindings(
+      runId: string,
+      parsed: FindingsWithFingerprint[],
+    ): Promise<void> {
+      if (parsed.length > MAX_FINDINGS_PER_RUN) {
+        repositoryLogger.warn(
+          `capping findings for run ${runId}: ${parsed.length} parsed, inserting first ${MAX_FINDINGS_PER_RUN}`,
+        );
+      }
+      const rows = parsed.slice(0, MAX_FINDINGS_PER_RUN);
+      if (rows.length === 0) return;
+      await db
+        .insert(findings)
+        .values(
+          rows.map((finding) => ({
+            runId,
+            severity: finding.severity,
+            category: finding.category,
+            ruleId: finding.ruleId,
+            file: finding.file,
+            line: finding.line,
+            col: finding.col,
+            message: finding.message,
+            fingerprint: finding.fingerprint,
+          })),
+        )
+        // Idempotent: redelivered jobs never double-insert a fingerprint.
+        .onConflictDoNothing({ target: [findings.runId, findings.fingerprint] });
     },
   };
 }

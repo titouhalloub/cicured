@@ -6,6 +6,8 @@ import type { ParsedFinding } from "./types";
 export * from "./types";
 export { bucketLine, computeFingerprint, normalizeMessage } from "./fingerprint";
 export { parseTsc } from "./parsers/tsc";
+export { parseEslint, stripRepoPrefix } from "./parsers/eslint";
+export { parseJest } from "./parsers/jest";
 export { parseTask } from "./parsers/index";
 
 /**

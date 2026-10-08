@@ -1,9 +1,11 @@
+import { parseReport } from "@sft/parser";
 import {
   assertRunStatusTransition,
   failureKindForExitCode,
   runStatusForExitCode,
   type FailureKind,
   type RunStatus,
+  type SftReportV2,
 } from "@sft/schemas";
 import { decryptInstallationId } from "../common/crypto";
 import { registerSecret, unregisterSecret, type WorkerLogger } from "../common/secrets";
@@ -61,6 +63,8 @@ interface Outcome {
   exitCode: number | null;
   failureKind: FailureKind | null;
   reportPath?: string;
+  /** The parsed report, when extraction succeeded — feeds the M3b findings. */
+  report?: SftReportV2;
 }
 
 /** Build minutes are billed, so a started run is at least one minute. */
@@ -104,6 +108,7 @@ async function classifyOutcome(
     exitCode,
     failureKind: failureKindForExitCode(exitCode),
     reportPath: extracted.path,
+    report: extracted.report,
   };
 }
 
@@ -208,6 +213,19 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       const outcome = await classifyOutcome(deps, handle, waitResult, runId);
       assertRunStatusTransition("running", outcome.status);
       const finishedAt = new Date();
+
+      // M3b: derive findings from the report before persisting the outcome.
+      // Best-effort by contract: a parse or insert hiccup must not fail a
+      // run whose report already landed.
+      if (outcome.report) {
+        try {
+          const parsed = parseReport(outcome.report);
+          await deps.repository.insertFindings(runId, parsed);
+        } catch (error) {
+          logger.error("could not persist findings", error);
+        }
+      }
+
       await deps.repository.finalizeRun(runId, {
         status: outcome.status,
         exitCode: outcome.exitCode,

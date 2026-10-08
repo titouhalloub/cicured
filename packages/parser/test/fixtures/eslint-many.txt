@@ -1,0 +1,12 @@
+/workspace/repo/apps/api/src/auth/session.ts
+  12:5   error    'createHash' is defined but never used                 no-unused-vars
+  48:1   warning  Missing return type on function                        @typescript-eslint/explicit-function-return-type
+
+/workspace/repo/apps/api/src/webhooks/webhooks.service.ts
+  87:14  error    Unexpected any in a TypeScript type                     @typescript-eslint/no-explicit-any
+ 102:3   error    'rawBody' is assigned a value but never used            no-unused-vars
+
+/workspace/repo/apps/web/src/components/App.tsx
+   1:1   error  Parsing error: Expected corresponding JSX closing tag for <div>
+
+✖ 5 problems (4 errors, 1 warning)

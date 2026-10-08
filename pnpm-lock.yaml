@@ -296,6 +296,9 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.782.0
         version: 3.1146.0
+      '@sft/parser':
+        specifier: workspace:*
+        version: link:../../packages/parser
       '@sft/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas

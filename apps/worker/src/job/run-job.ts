@@ -1,4 +1,4 @@
-import { parseReport } from "@sft/parser";
+import type { FindingsWithFingerprint } from "@sft/parser";
 import {
   assertRunStatusTransition,
   failureKindForExitCode,
@@ -7,6 +7,10 @@ import {
   type RunStatus,
   type SftReportV2,
 } from "@sft/schemas";
+import { parseReport } from "@sft/parser";
+import type { LlmCache } from "../ai/cache";
+import type { LlmProvider } from "../ai/provider";
+import { generateSuggestions } from "../ai/generate";
 import { decryptInstallationId } from "../common/crypto";
 import { registerSecret, unregisterSecret, type WorkerLogger } from "../common/secrets";
 import type { WorkerEnv } from "../env";
@@ -41,6 +45,10 @@ export interface RunJobDeps {
   extractReport: ReportExtractor;
   mintToken: (installationId: number) => Promise<string>;
   logger: WorkerLogger;
+  /** M4a AI suggestion engine. When both are present, a generation pass runs
+   * after findings are persisted. */
+  llmProvider: LlmProvider | null;
+  llmCache: LlmCache | null;
   /** M2b-1: live log fan-out. */
   publisher: LogPublisher;
   attach: AttachFn;
@@ -217,13 +225,54 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       // M3b: derive findings from the report before persisting the outcome.
       // Best-effort by contract: a parse or insert hiccup must not fail a
       // run whose report already landed.
+      let parsedFindings: FindingsWithFingerprint[] | undefined;
       if (outcome.report) {
         try {
-          const parsed = parseReport(outcome.report);
-          await deps.repository.insertFindings(runId, parsed);
+          parsedFindings = parseReport(outcome.report);
+          await deps.repository.insertFindings(runId, parsedFindings);
         } catch (error) {
           logger.error("could not persist findings", error);
         }
+      }
+
+      // M4a: LLM generation stage.
+      // Only run when provider + cache are configured (AI disabled when
+      // ANTHROPIC_API_KEY is unset). Findings are resolved with their DB IDs
+      // so the cache/key contract stays stable.
+      if (parsedFindings && deps.llmProvider && deps.llmCache) {
+        const findingsWithId = await deps.repository.getFindingsByFingerprints(
+          runId,
+          parsedFindings.map((finding) => finding.fingerprint),
+        );
+
+        const options = {
+          provider: deps.llmProvider,
+          cache: deps.llmCache,
+          logger: logger,
+          temperature: deps.env.LLM_TEMPERATURE,
+          maxOutputTokens: deps.env.LLM_MAX_OUTPUT_TOKENS,
+          findingsPerRunCap: deps.env.LLM_FINDINGS_PER_RUN_CAP,
+        };
+
+        const drafts = await generateSuggestions(
+          findingsWithId,
+          async () => {
+            // M4a placeholder: the sandbox workspace is destroyed at the end of
+            // the run, so the worker cannot fetch finding-snapshot code here.
+            // A real worker would resolve `finding.file` + `finding.line` from
+            // the archived clone or a git provider and return ~5 lines.
+            return "";
+          },
+          options,
+        );
+
+        if (drafts.length > 0) {
+          // GeneratedSuggestion carries findingId (notNull FK), model and
+          // promptVersion — persisted as-is so each row links to its finding.
+          await deps.repository.insertSuggestions(runId, drafts);
+        }
+
+        logger.info(`AI stage complete: ${drafts.length} suggestion(s) for run ${runId}`);
       }
 
       await deps.repository.finalizeRun(runId, {

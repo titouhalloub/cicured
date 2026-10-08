@@ -18,3 +18,18 @@ export const Suggestion = z.object({
 });
 
 export type Suggestion = z.infer<typeof Suggestion>;
+
+/**
+ * LLM suggestion draft (Spec §6): the raw output from the model before
+ * it is persisted with finding metadata. Stricter than Suggestion — the
+ * patchDiff must look like a unified diff (contain ---, +++, or @@).
+ */
+export const SuggestionDraft = z.object({
+  patchDiff: z.string().min(1).max(10_000).refine(
+    (v) => /^(---|\+\+\+|@@)/m.test(v),
+    "patchDiff must look like a unified diff (must contain ---, +++, or @@)",
+  ),
+  explanation: z.string().min(1).max(500),
+  confidence: z.number().min(0).max(1),
+});
+export type SuggestionDraft = z.infer<typeof SuggestionDraft>;

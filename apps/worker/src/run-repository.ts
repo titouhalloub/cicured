@@ -1,10 +1,11 @@
 import type { FindingsWithFingerprint } from "@sft/parser";
 import { FINDING_CATEGORIES, FINDING_SEVERITIES } from "@sft/schemas";
 import type { FailureKind, RunStatus } from "@sft/schemas";
-import { and, eq } from "drizzle-orm";
-import { integer, pgEnum, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { and, eq, inArray } from "drizzle-orm";
+import { integer, pgEnum, pgTable, real, text, timestamp, boolean, uuid } from "drizzle-orm/pg-core";
 import type { Database } from "./db";
 import { createLogger } from "./common/secrets";
+import type { GeneratedSuggestion } from "./ai/generate";
 import {
   logs,
   projects,
@@ -39,6 +40,19 @@ export const findings = pgTable("findings", {
   col: integer("col").notNull(),
   message: text("message").notNull(),
   fingerprint: text("fingerprint").notNull(),
+});
+
+/** M4a: per-finding LLM suggestions, mirroring the shared storage schema. */
+export const suggestions = pgTable("suggestions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  findingId: uuid("finding_id").references(() => findings.id, { onDelete: "cascade" }),
+  model: text("model").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  patchDiff: text("patch_diff").notNull(),
+  explanation: text("explanation").notNull(),
+  confidence: real("confidence").notNull(),
+  accepted: boolean("accepted"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 /** Findings persisted per run (Spec آ§5: parser output capped per run). */
@@ -90,6 +104,10 @@ export interface RunRepository {
    * (run_id, fingerprint) index; at most 500 rows per run.
    */
   insertFindings(runId: string, findings: FindingsWithFingerprint[]): Promise<void>;
+  /** M4a: persist generated suggestions for a run. */
+  insertSuggestions(runId: string, suggestions: GeneratedSuggestion[]): Promise<void>;
+  /** M4a: fetch persisted findings by fingerprint so the AI stage can attach IDs. */
+  getFindingsByFingerprints(runId: string, fingerprints: string[]): Promise<(FindingsWithFingerprint & { id: string })[]>;
 }
 
 export function createRunRepository(db: Database): RunRepository {
@@ -188,6 +206,53 @@ export function createRunRepository(db: Database): RunRepository {
         )
         // Idempotent: redelivered jobs never double-insert a fingerprint.
         .onConflictDoNothing({ target: [findings.runId, findings.fingerprint] });
+    },
+
+    async getFindingsByFingerprints(
+      runId: string,
+      fingerprints: string[],
+    ): Promise<(FindingsWithFingerprint & { id: string })[]> {
+      if (fingerprints.length === 0) return [];
+      const rows = await db
+        .select({
+          id: findings.id,
+          severity: findings.severity,
+          category: findings.category,
+          ruleId: findings.ruleId,
+          file: findings.file,
+          line: findings.line,
+          col: findings.col,
+          message: findings.message,
+          fingerprint: findings.fingerprint,
+        })
+        .from(findings)
+        .where(
+          and(eq(findings.runId, runId), inArray(findings.fingerprint, fingerprints)),
+        );
+      return rows as (FindingsWithFingerprint & { id: string })[];
+    },
+
+    async insertSuggestions(
+      runId: string,
+      newSuggestions: GeneratedSuggestion[],
+    ): Promise<void> {
+      if (newSuggestions.length === 0) return;
+      // The `suggestions` table has no run_id column: rows are scoped to a run
+      // through findings (FK on finding_id). `runId` stays in the signature for
+      // call-site symmetry with insertFindings.
+      await db
+        .insert(suggestions)
+        .values(
+          newSuggestions.map((suggestion) => ({
+            findingId: suggestion.findingId,
+            model: suggestion.model,
+            promptVersion: suggestion.promptVersion,
+            patchDiff: suggestion.patchDiff,
+            explanation: suggestion.explanation,
+            confidence: suggestion.confidence,
+            accepted: null,
+          })),
+        );
     },
   };
 }

@@ -14,6 +14,8 @@ import type {
 } from "../src/sandbox/launcher";
 import type { ExtractedReport } from "../src/report/handler";
 import type { FlushResult, LogArchiver } from "../src/logs/archiver";
+import type { LlmProvider } from "../src/ai/provider";
+import type { LlmCache } from "../src/ai/cache";
 import { createLogger } from "../src/common/secrets";
 import { makeEnv, TEST_ENCRYPTION_KEY } from "./test-utils";
 
@@ -107,6 +109,8 @@ function makeDeps(options: {
     insertFindings: async (_runId, findings) => {
       calls.insertedFindings.push(findings);
     },
+    getFindingsByFingerprints: async () => [],
+    insertSuggestions: async () => undefined,
   };
 
   const sandbox: SandboxLauncher = {
@@ -154,6 +158,8 @@ function makeDeps(options: {
         },
       };
     },
+    llmProvider: null as LlmProvider | null,
+    llmCache: null as LlmCache | null,
   };
 
   return { deps, calls, handle };

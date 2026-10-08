@@ -13,6 +13,8 @@ import { createRunsWorker } from "./queue/runs.worker";
 import { createRunRepository } from "./run-repository";
 import { createS3Client } from "./logs/s3-client";
 import { createSandboxLauncher, type DockerLike } from "./sandbox/launcher";
+import { createLlmProvider } from "./ai/provider";
+import { createLlmCache } from "./ai/cache";
 
 /**
  * Worker bootstrap (Spec §11 M2). Consumes the same BullMQ queue the API
@@ -33,6 +35,12 @@ async function main(): Promise<void> {
   const docker: DockerLike = new Docker();
   const sandbox = createSandboxLauncher(docker, env);
   const repository = createRunRepository(database.db);
+  const llmProvider = createLlmProvider(env);
+  if (!llmProvider) {
+    logger.info("[sft-worker] LLM disabled: ANTHROPIC_API_KEY not set");
+  }
+  const llmCache = createLlmCache(redis, env.LLM_CACHE_TTL_SECONDS);
+
   // PUBLISH is an ordinary command, so the BullMQ client can carry the log
   // traffic; only the API needs a dedicated subscriber connection.
   const logPublisher = createLogPublisher(redis, env.SFT_LOG_CHANNEL_PREFIX);
@@ -58,6 +66,8 @@ async function main(): Promise<void> {
         env.REPORTS_DIR,
         logger.child({ runId }),
       ),
+    llmProvider,
+    llmCache,
   });
 
   const worker = createRunsWorker({

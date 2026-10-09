@@ -1,7 +1,8 @@
 import { ConflictException, Inject, Injectable } from "@nestjs/common";
-import type { CreateProjectInput } from "@sft/schemas";
-import { and, eq } from "drizzle-orm";
+import type { CreateProjectInput, ProjectSummary } from "@sft/schemas";
+import { and, desc, eq } from "drizzle-orm";
 import { CryptoService } from "../common/crypto.service";
+import { toProjectSummary } from "../common/dto";
 import { DRIZZLE, projects, type Database, type ProjectRow } from "../db";
 import { GitHubClient } from "../auth/github.client";
 
@@ -42,6 +43,16 @@ export class ProjectsService {
       }
       throw error;
     }
+  }
+
+  /** GET /projects - all projects owned by the user, newest first. */
+  async listForUser(userId: string): Promise<ProjectSummary[]> {
+    const rows = await this.db
+      .select()
+      .from(projects)
+      .where(eq(projects.userId, userId))
+      .orderBy(desc(projects.createdAt));
+    return rows.map(toProjectSummary);
   }
 
   /** Ownership check used by every project/run endpoint. */

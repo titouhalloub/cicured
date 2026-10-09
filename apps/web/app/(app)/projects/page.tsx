@@ -7,7 +7,7 @@ import { RelativeTime } from "@/components/relative-time";
 import { StatusBadge } from "@/components/runs/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import type { ProjectSummary, RunSummary } from "@/lib/schemas";
 import { fetchProjects, type RunsPage } from "@/lib/queries";

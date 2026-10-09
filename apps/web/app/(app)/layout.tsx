@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { DesktopSidebar, SidebarContent } from "@/components/app-shell/sidebar";
 import { Topbar } from "@/components/app-shell/topbar";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { Toaster } from "@/components/ui/toast";
+import { Toaster } from "sonner";
 
 const STORAGE_KEY = "cicured-sidebar-collapsed";
 
@@ -43,7 +43,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <main className="mx-auto flex max-w-[1200px] flex-col gap-6 p-6 lg:p-8">{children}</main>
       </div>
 
-      <Toaster />
+      <Toaster position="top-right" richColors />
     </div>
   );
 }

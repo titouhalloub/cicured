@@ -1,7 +1,7 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { LogEvent } from "@sft/schemas";
+import { LogEvent, type SessionUser } from "@sft/schemas";
 import { API_BASE, apiFetch } from "./api";
 import type { FindingWithId, ProjectSummary, RunSummary, SuggestionWithId } from "./schemas";
 
@@ -19,6 +19,18 @@ export function fetchProjects(): Promise<ProjectSummary[]> {
 
 export function useProjects() {
   return useQuery({ queryKey: ["projects"], queryFn: fetchProjects });
+}
+
+/**
+ * GET /auth/me — the signed-in user. Long staleTime: the session only changes
+ * on login/logout, so there is no reason to re-validate it constantly.
+ */
+export function useMe() {
+  return useQuery({
+    queryKey: ["me"],
+    queryFn: () => apiFetch<SessionUser>("/auth/me"),
+    staleTime: 5 * 60_000,
+  });
 }
 
 /**

@@ -1,6 +1,7 @@
 "use client";
 import { ArrowRight, CheckCircle2, Clock, PlayCircle, Rocket, XCircle } from "lucide-react";
 import Link from "next/link";
+import type { RunSummary } from "@sft/schemas";
 import { EmptyState } from "@/components/empty-state";
 import { RunsTable } from "@/components/runs/runs-table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,17 +13,42 @@ interface StatCard {
   iconClass: string;
 }
 
-// TODO(M5): real stats - there is no aggregate metrics endpoint yet, so every
-// value and delta below is stubbed with an em dash for M4b-1.
 const STATS: StatCard[] = [
   { label: "Total runs (last 30d)", icon: PlayCircle, iconClass: "bg-brand-primary/10 text-brand-primary" },
   { label: "Pass rate", icon: CheckCircle2, iconClass: "bg-brand-success/10 text-brand-success" },
   { label: "Avg build time", icon: Clock, iconClass: "bg-brand-info/10 text-brand-info" },
+  // TODO(M5): no aggregate feedback endpoint yet, so "Suggestions accepted"
+  // stays an em dash. The other three are computed from the runs below.
   { label: "Suggestions accepted", icon: XCircle, iconClass: "bg-brand-warning/10 text-brand-warning" },
 ];
 
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
 export default function DashboardPage() {
   const { data, isLoading, isError } = useAllRuns();
+  const runs: RunSummary[] = data?.runs ?? [];
+
+  const now = Date.now();
+  const thirtyDaysAgo = now - THIRTY_DAYS_MS;
+  const recentRuns = runs.filter(
+    (r) => new Date(r.createdAt).getTime() >= thirtyDaysAgo,
+  );
+
+  const totalRuns = recentRuns.length;
+  const passed = recentRuns.filter((r) => r.status === "success").length;
+  const passRate = totalRuns > 0 ? Math.round((passed / totalRuns) * 100) : null;
+  const avgMinutes =
+    recentRuns.length > 0
+      ? recentRuns.reduce((sum, r) => sum + (r.buildMinutes ?? 0), 0) /
+        recentRuns.length
+      : null;
+
+  const statValues: Record<string, string> = {
+    "Total runs (last 30d)": String(totalRuns),
+    "Pass rate": passRate != null ? `${passRate}%` : "—",
+    "Avg build time": avgMinutes != null ? `${avgMinutes.toFixed(1)}m` : "—",
+    "Suggestions accepted": "—",
+  };
 
   return (
     <>
@@ -46,7 +72,7 @@ export default function DashboardPage() {
                   {stat.label}
                 </p>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-medium">—</span>
+                  <span className="text-3xl font-medium">{statValues[stat.label] ?? "—"}</span>
                   <span className="text-xs text-text-muted-light dark:text-text-muted-dark">
                     — vs last period
                   </span>

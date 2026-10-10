@@ -14,9 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api";
-
-// TODO(M4b-2): replace with the real session user from GET /auth/me.
-const STUB_USER = { name: "Demo User", email: "demo@example.com" };
+import { useMe } from "@/lib/queries";
 
 interface TopbarProps {
   onToggleSidebar: () => void;
@@ -27,6 +25,11 @@ export function Topbar({ onToggleSidebar, onOpenMenu }: TopbarProps) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  const { data: me } = useMe();
+  const userEmail = me?.email ?? "—";
+  const userPlan = me?.plan ?? "";
+  const userInitial = me?.email ? me.email[0]!.toUpperCase() : "U";
 
   const signOut = async () => {
     try {
@@ -92,19 +95,16 @@ export function Topbar({ onToggleSidebar, onOpenMenu }: TopbarProps) {
             <Button variant="ghost" className="ml-1 h-10 w-10 rounded-full p-0">
               <Avatar>
                 <AvatarFallback className="bg-brand-primary/10 text-brand-primary">
-                  {STUB_USER.name
-                    .split(" ")
-                    .map((part) => part[0])
-                    .join("")}
+                  {userInitial}
                 </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
-              <span className="block truncate text-sm font-medium">{STUB_USER.name}</span>
+              <span className="block truncate text-sm font-medium">{userEmail}</span>
               <span className="block truncate text-xs font-normal text-text-muted-light dark:text-text-muted-dark">
-                {STUB_USER.email}
+                {userPlan}
               </span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

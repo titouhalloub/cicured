@@ -60,24 +60,65 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/**
+ * M5 §9: `LOG_FORMAT=json` switches every line to a single JSON object, which
+ * is what a log shipper can parse. The default stays human-readable text so
+ * existing tests (and local `docker compose logs`) keep working.
+ *
+ * Shape: `{"level":"info","time":"...","scope":"...","runId":"...","msg":"..."}`
+ */
+function emit(
+  level: "info" | "warn" | "error",
+  scope: string | undefined,
+  bindings: Record<string, string>,
+  message: string,
+): void {
+  const text = redact(message);
+  const write =
+    level === "error" ? console.error : level === "warn" ? console.warn : console.log;
+
+  if (process.env.LOG_FORMAT === "json") {
+    const record: Record<string, string> = {
+      level,
+      time: new Date().toISOString(),
+      msg: text,
+    };
+    if (scope) record.scope = scope;
+    for (const [key, value] of Object.entries(bindings)) {
+      if (value !== "") record[key] = value;
+    }
+    write(JSON.stringify(record));
+    return;
+  }
+
+  // A missing scope must not leave a double space after the [sft-worker] tag.
+  const prefix = scope ? `[sft-worker] ${scope}` : "[sft-worker]";
+  write(`${prefix}${renderBindings(bindings)} ${text}`);
+}
+
 export function createLogger(
   scope?: string,
   bindings: Record<string, string> = {},
 ): WorkerLogger {
-  const suffix = renderBindings(bindings);
-  // A missing scope must not leave a double space after the [sft-worker] tag.
-  const prefix = scope ? `[sft-worker] ${scope}` : "[sft-worker]";
-  const line = (message: string): string => redact(`${prefix}${suffix} ${message}`);
   return {
     info(message) {
-      console.log(line(message));
+      emit("info", scope, bindings, message);
     },
     warn(message, error) {
-      console.warn(
-        line(error === undefined ? message : `${message}: ${errorMessage(error)}`));
+      emit(
+        "warn",
+        scope,
+        bindings,
+        error === undefined ? message : `${message}: ${errorMessage(error)}`,
+      );
     },
     error(message, error) {
-      console.error(line(error === undefined ? message : `${message}: ${errorMessage(error)}`));
+      emit(
+        "error",
+        scope,
+        bindings,
+        error === undefined ? message : `${message}: ${errorMessage(error)}`,
+      );
     },
     child(bindings, childScope) {
       // Fresh context: no parent scope, no parent bindings.

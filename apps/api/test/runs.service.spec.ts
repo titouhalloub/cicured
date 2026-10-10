@@ -84,7 +84,10 @@ function makeSuggestionRow(overrides: Partial<SuggestionRow> = {}): SuggestionRo
  * covered by runs.integration.spec.ts.
  *
  * Selects come in two flavours, mirroring how the service uses them:
- *  - `ownedRows` — limit(1)-terminated (ownership walks, single row)
+ *  - `ownedRows` — limit(1)-terminated (ownership walks, single row). These are
+ *    consumed in call order, so a method that runs several limit(1) queries
+ *    (createManualRun's concurrency/quota/dedup guards) gets a distinct row
+ *    for each. Callers that only run one such query are unaffected.
  *  - `rows`      — orderBy(...)-terminated (findings / suggestions lists)
  */
 function makeDbStub(
@@ -102,7 +105,7 @@ function makeDbStub(
     where: [] as unknown[],
     joinCount: 0,
   };
-  const ownedRows = options.ownedRows ?? [];
+  const ownedQueue = [...(options.ownedRows ?? [])];
   const rows = options.rows ?? [];
 
   const terminal = {
@@ -110,7 +113,7 @@ function makeDbStub(
       calls.orderBy.push(args);
       return Promise.resolve(rows);
     },
-    limit: () => Promise.resolve(ownedRows),
+    limit: () => Promise.resolve([ownedQueue.shift()]),
   };
   const joined = {
     innerJoin: () => {
@@ -270,6 +273,108 @@ describe("RunsService.createManualRun (Spec §14 acceptance: queued row + BullMQ
 
     // No orphan `queued` rows: the row was cancelled and stamped.
     expect(calls.updates[0]).toMatchObject({ status: "cancelled" });
+  });
+});
+
+describe("RunsService.createManualRun guards (M5 §9)", () => {
+  function makeService(db: Database, project: ProjectRow | null = makeProjectRow()) {
+    const enqueued: Array<{ runId: string; projectId: string }> = [];
+    const service = new RunsService(
+      db,
+      {
+        enqueueRun: (data: { runId: string; projectId: string }) => {
+          enqueued.push(data);
+          return Promise.resolve();
+        },
+      } as unknown as RunsQueue,
+      makeProjectsStub(project),
+    );
+    return { service, enqueued };
+  }
+
+  it("throws Conflict when the user already has 3 active runs", async () => {
+    // First limit(1) query is the concurrency count.
+    const { db, calls } = makeDbStub({ ownedRows: [{ value: 3 }] });
+
+    const { service, enqueued } = makeService(db);
+    await expect(
+      service.createManualRun({ id: USER_ID, plan: "free" } as never, PROJECT_ID, {}),
+    ).rejects.toMatchObject({ status: 409 });
+
+    // Nothing was inserted or enqueued.
+    expect(calls.insertedValues).toHaveLength(0);
+    expect(enqueued).toHaveLength(0);
+  });
+
+  it("allows a run when the user is under the concurrency limit", async () => {
+    const { db, calls } = makeDbStub({
+      ownedRows: [{ value: 2 }, { total: 0 }],
+      inserted: makeRunRow(),
+    });
+
+    const { service } = makeService(db);
+    const row = await service.createManualRun({ id: USER_ID, plan: "free" } as never, PROJECT_ID, {});
+
+    expect(row.status).toBe("queued");
+    expect(calls.insertedValues).toHaveLength(1);
+  });
+
+  it("returns the existing run when a queued/running run for the same project+sha exists", async () => {
+    const existing = makeRunRow({ sha: "abc1234", status: "running" });
+    const { db, calls } = makeDbStub({ ownedRows: [{ value: 0 }, { total: 0 }, existing] });
+
+    const { service, enqueued } = makeService(db);
+    const row = await service.createManualRun({ id: USER_ID, plan: "free" } as never, PROJECT_ID, {
+      sha: "abc1234",
+    });
+
+    // The in-flight run is handed back verbatim, not duplicated.
+    expect(row).toBe(existing);
+    expect(calls.insertedValues).toHaveLength(0);
+    expect(enqueued).toHaveLength(0);
+  });
+
+  it("skips dedup when sha is null and always creates a new run", async () => {
+    const { db, calls } = makeDbStub({
+      ownedRows: [{ value: 0 }, { total: 0 }],
+      inserted: makeRunRow(),
+    });
+
+    const { service, enqueued } = makeService(db);
+    const row = await service.createManualRun({ id: USER_ID, plan: "free" } as never, PROJECT_ID, {
+      sha: undefined,
+    });
+
+    expect(row.status).toBe("queued");
+    expect(calls.insertedValues).toHaveLength(1);
+    expect(enqueued).toHaveLength(1);
+    // Only the two guards ran their limit(1) queries; the dedup lookup did not.
+    expect(calls.where).toHaveLength(2);
+  });
+
+  it("throws Forbidden when the user has exceeded their plan's monthly build-minute quota", async () => {
+    // free = 100 minutes/month; 150 already spent.
+    const { db, calls } = makeDbStub({ ownedRows: [{ value: 0 }, { total: 150 }] });
+
+    const { service, enqueued } = makeService(db);
+    await expect(
+      service.createManualRun({ id: USER_ID, plan: "free" } as never, PROJECT_ID, {}),
+    ).rejects.toMatchObject({ status: 403 });
+
+    expect(calls.insertedValues).toHaveLength(0);
+    expect(enqueued).toHaveLength(0);
+  });
+
+  it("allows a run when the user is still inside their plan quota", async () => {
+    const { db } = makeDbStub({
+      ownedRows: [{ value: 0 }, { total: 99 }],
+      inserted: makeRunRow(),
+    });
+
+    const { service } = makeService(db);
+    const row = await service.createManualRun({ id: USER_ID, plan: "team" } as never, PROJECT_ID, {});
+
+    expect(row.status).toBe("queued");
   });
 });
 

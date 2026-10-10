@@ -1,3 +1,4 @@
+import { Throttle } from "@nestjs/throttler";
 import {
   Body,
   Controller,
@@ -28,9 +29,15 @@ import { RunsService, type SuggestionWithId } from "./runs.service";
 export class RunsController {
   constructor(private readonly runsService: RunsService) {}
 
-  /** POST /projects/:id/run - creates a queued run + BullMQ job. */
+  /**
+   * POST /projects/:id/run - creates a queued run + BullMQ job.
+   *
+   * Tightest limit in the app: every call can mint a sandbox, so it is capped
+   * well below the global 60/min (M5 §9).
+   */
   @Post("projects/:id/run")
   @HttpCode(202)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   async createRun(
     @CurrentUser() user: UserRow,
     @Param("id") projectId: string,

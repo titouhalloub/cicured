@@ -1,0 +1,50 @@
+# Production overlay. Stacked on top of the base docker-compose.yml, which
+# keeps providing postgres, redis, minio and minio-init:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Only the application services (api, worker) are added here; the base file
+# is intentionally left untouched.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    ports:
+      - "4000:4000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    volumes:
+      # Dev convenience only. In production, point this at a socket proxy
+      # (e.g. tecnativa/docker-socket-proxy) instead of the raw host socket —
+      # see deploy/README.md.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./apps/worker/tmp:/app/apps/worker/tmp
+
+networks:
+  default:
+    name: sft-dev-prod

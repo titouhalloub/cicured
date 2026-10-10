@@ -4,6 +4,11 @@ Git-native build & repair intelligence platform — *"CI that doesn't just tell 
 
 **Current milestone: M2a — Worker + sandbox** (`docs/SFT-Dev_Spec.md` §11). M2b (log streaming, SSE, S3 archival, webhooks) has **not** been started.
 
+## Deploy
+
+Production deployment uses a Compose overlay: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`.
+See **[`deploy/README.md`](deploy/README.md)** for the full runbook (prerequisites, secrets, socket proxy, operations).
+
 ## Layout
 
 | Path | Purpose |

@@ -10,6 +10,8 @@ import {
 } from "@nestjs/common";
 import {
   CreateRunInput,
+  FeedbackInput,
+  type Finding,
   ListRunsQuery,
   type RunSummary,
 } from "@sft/schemas";
@@ -18,7 +20,7 @@ import { SessionGuard } from "../auth/session.guard";
 import { toRunSummary } from "../common/dto";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import type { UserRow } from "../db";
-import { RunsService } from "./runs.service";
+import { RunsService, type SuggestionWithId } from "./runs.service";
 
 /** Run lifecycle endpoints (Spec §6). */
 @Controller()
@@ -53,5 +55,40 @@ export class RunsController {
   @Get("runs/:id")
   async getRun(@CurrentUser() user: UserRow, @Param("id") runId: string): Promise<RunSummary> {
     return toRunSummary(await this.runsService.getOwnedRun(user, runId));
+  }
+
+  /** GET /runs/:id/findings — parser output for a run (Spec §4 step 8). */
+  @Get("runs/:id/findings")
+  async getFindings(
+    @CurrentUser() user: UserRow,
+    @Param("id") runId: string,
+  ): Promise<Finding[]> {
+    return this.runsService.findingsForRun(user, runId);
+  }
+
+  /**
+   * GET /runs/:id/suggestions — LLM drafts for a run (Spec §6/§7). The shape is
+   * wider than the `Suggestion` schema: id/findingId/createdAt are DB columns.
+   */
+  @Get("runs/:id/suggestions")
+  async getSuggestions(
+    @CurrentUser() user: UserRow,
+    @Param("id") runId: string,
+  ): Promise<SuggestionWithId[]> {
+    return this.runsService.suggestionsForRun(user, runId);
+  }
+
+  /**
+   * POST /suggestions/:id/feedback — accept/reject a suggestion
+   * (Spec §4 step 11). Never auto-applies the patch.
+   */
+  @Post("suggestions/:id/feedback")
+  @UseGuards(SessionGuard)
+  async feedback(
+    @CurrentUser() user: UserRow,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(FeedbackInput)) body: FeedbackInput,
+  ): Promise<{ ok: true }> {
+    return this.runsService.recordFeedback(user.id, id, body.accepted);
   }
 }

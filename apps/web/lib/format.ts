@@ -32,3 +32,19 @@ export function shortSha(sha: string | null): string {
 export function formatDuration(minutes: number | null): string {
   return minutes === null ? "—" : `${minutes}m`;
 }
+
+/**
+ * Task duration in milliseconds -> "420ms" / "1.2s" / "45s" / "1m 23s".
+ *
+ * `formatDuration` above works in whole minutes (the `build_minutes` column);
+ * parser timings are millisecond-precision, hence the separate helper.
+ */
+export function formatMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "—";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.round(seconds % 60);
+  return `${minutes}m ${rest}s`;
+}

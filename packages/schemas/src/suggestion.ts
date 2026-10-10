@@ -33,3 +33,14 @@ export const SuggestionDraft = z.object({
   confidence: z.number().min(0).max(1),
 });
 export type SuggestionDraft = z.infer<typeof SuggestionDraft>;
+
+/**
+ * User feedback on a suggestion (Spec §4 step 11): the accept/reject verdict
+ * that closes the loop. `accepted` is a plain boolean — the suggestion row
+ * starts with a null `accepted` and this is what fills it in.
+ */
+export const FeedbackInput = z.object({
+  accepted: z.boolean(),
+});
+
+export type FeedbackInput = z.infer<typeof FeedbackInput>;

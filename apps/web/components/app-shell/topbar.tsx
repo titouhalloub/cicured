@@ -88,7 +88,7 @@ export function Topbar({ onToggleSidebar, onOpenMenu }: TopbarProps) {
         </Button>
 
         <DropdownMenu>
-          <DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="ml-1 h-10 w-10 rounded-full p-0">
               <Avatar>
                 <AvatarFallback className="bg-brand-primary/10 text-brand-primary">

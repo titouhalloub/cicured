@@ -1,4 +1,6 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+// All requests go to the Next.js server, which proxies /api/* to the API.
+// This keeps cookies same-origin and eliminates CORS.
+const API_URL = "/api";
 
 export class ApiError extends Error {
   constructor(

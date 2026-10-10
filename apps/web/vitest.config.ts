@@ -9,7 +9,7 @@ export default defineConfig({
     alias: { "@": fileURLToPath(new URL(".", import.meta.url)) },
   },
   test: {
-    environment: "jsdom",
+    environment: "happy-dom",
     include: ["test/**/*.spec.ts", "test/**/*.spec.tsx"],
   },
 });

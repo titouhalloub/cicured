@@ -71,7 +71,7 @@ describe("createSandboxContainer (Spec §8 hardening)", () => {
       "/host/path/packages/runner/sft-dev.mjs:/opt/sft/sft-dev.mjs:ro",
     );
     expect(options.HostConfig?.Tmpfs).toMatchObject({
-      "/workspace": expect.stringContaining("size=1g"),
+      "/workspace": expect.stringContaining("size=3g"),
       "/tmp": expect.any(String),
     });
     expect(container.start).toHaveBeenCalledTimes(1);

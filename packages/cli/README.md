@@ -25,6 +25,20 @@ Or globally:
 | `sft login` | Sign in to cicured.com (Phase 3) |
 | `sft sync` | Upload local history (Phase 3) |
 
+## Graph-aware commands (BYOK)
+
+After `sft run`, the last `sft-report.json` in the current directory
+is parsed into findings. `sft graph` builds a code graph of the repo,
+cached at `.sft/graph.json`.
+
+- `sft explain <n>` — a plain-English explanation of finding #n,
+  with caller/callee/test context from the graph.
+- `sft fix <n>` — a schema-validated unified diff for finding #n,
+  plus a confirmation prompt before applying.
+
+Both require `ANTHROPIC_API_KEY`. Nothing is sent to cicured — the
+key is used directly against the Anthropic API (BYOK).
+
 ## Bring your own key
 
 `sft suggest` never talks to the network unless **you** supply a key:

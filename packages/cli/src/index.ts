@@ -1,4 +1,6 @@
 import { pathToFileURL } from "node:url";
+import { explainCommand } from "./commands/explain";
+import { fixCommand } from "./commands/fix";
 import { graphCommand } from "./commands/graph";
 import { initCommand } from "./commands/init";
 import { logsCommand } from "./commands/logs";
@@ -15,6 +17,8 @@ Usage:
   sft logs [--limit N]            Show recent local runs (default 10)
   sft init                        Write a sft-dev.config.json template
   sft suggest                     Ask Claude to fix the last failure (BYOK)
+  sft explain <n>                 Explain finding #n from the last run (BYOK)
+  sft fix <n>                     Generate and optionally apply a patch for #n (BYOK)
   sft graph [--json]              Build a code graph of the current repo
   sft login                       Sign in to cicured.com (coming soon)
   sft sync                        Upload local history (coming soon)
@@ -33,6 +37,7 @@ async function dispatch(argv: string[]): Promise<number> {
     return 0;
   }
 
+  let code: number;
   switch (command) {
     case "run":
       return runCommand(rest);
@@ -42,6 +47,12 @@ async function dispatch(argv: string[]): Promise<number> {
       return initCommand();
     case "suggest":
       return suggestCommand(rest);
+    case "explain":
+      code = await explainCommand(rest);
+      break;
+    case "fix":
+      code = await fixCommand(rest);
+      break;
     case "graph":
       return graphCommand(rest);
     case "login":
@@ -52,6 +63,7 @@ async function dispatch(argv: string[]): Promise<number> {
       process.stderr.write(`Unknown command: ${command}. Try \`sft --help\`.\n`);
       return 2;
   }
+  return code;
 }
 
 /** CLI entry point. Resolves the exit code and terminates the process. */

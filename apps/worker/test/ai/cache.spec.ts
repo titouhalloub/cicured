@@ -15,6 +15,7 @@ const DRAFT: SuggestionDraft = {
   patchDiff: "--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b\n",
   explanation: "fix it",
   confidence: 0.8,
+  filesTouched: ["x.ts"],
 };
 
 interface RedisOverrides {

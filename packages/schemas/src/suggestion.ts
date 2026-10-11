@@ -31,6 +31,8 @@ export const SuggestionDraft = z.object({
   ),
   explanation: z.string().min(1).max(500),
   confidence: z.number().min(0).max(1),
+  /** Repo-relative forward-slash paths the patch touches (1–10 files). */
+  filesTouched: z.array(z.string().min(1).max(1024)).min(1).max(10),
 });
 export type SuggestionDraft = z.infer<typeof SuggestionDraft>;
 

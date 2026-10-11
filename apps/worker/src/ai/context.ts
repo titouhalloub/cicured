@@ -37,8 +37,11 @@ Respond with a single JSON object matching this schema:
 {
   "patchDiff": "<unified diff, 1-10000 chars, must contain --- or +++ or @@>",
   "explanation": "<1-500 char explanation>",
-  "confidence": <number between 0.0 and 1.0>
+  "confidence": <number between 0.0 and 1.0>,
+  "filesTouched": ["<repo-relative path>", ...]
 }
+
+filesTouched must list every file the patch modifies, using repo-relative forward-slash paths. Do not list files outside the finding's file or its immediate callers.
 
 The patchDiff must be a valid unified diff that fixes the finding without breaking unrelated code. Do not include markdown fences.
 Respond with the JSON object only.

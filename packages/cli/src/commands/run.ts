@@ -7,6 +7,7 @@ import path from "node:path";
 // A namespace import exposes the detected exports at runtime.
 import * as schemas from "@sft/schemas";
 import type { SftReportV2 } from "@sft/schemas";
+import { parseReport, type FindingsWithFingerprint } from "@sft/parser";
 import { runRunner } from "../runner";
 import { appendRun, type CacheRun } from "../storage/cache";
 import { banner, fail, pass } from "../ui";
@@ -14,6 +15,30 @@ import { banner, fail, pass } from "../ui";
 interface Flags {
   json: boolean;
   noCache: boolean;
+}
+
+/** Hard cap on findings printed in the human-readable summary. */
+const FINDINGS_PRINT_LIMIT = 20;
+
+/** Truncates a message at 80 chars, appending an ellipsis. */
+function formatMessage(message: string): string {
+  return message.length > 80 ? `${message.slice(0, 79)}…` : message;
+}
+
+/** Prints the findings section: `── Findings (N) ──` plus numbered rows. */
+function printFindings(findings: FindingsWithFingerprint[]): void {
+  process.stdout.write(`${banner(`Findings (${findings.length})`)}\n`);
+  const shown = findings.slice(0, FINDINGS_PRINT_LIMIT);
+  shown.forEach((finding, index) => {
+    const location = `${finding.file}:${finding.line}:${finding.col}`;
+    process.stdout.write(
+      `  #${index + 1}  ${finding.severity.padEnd(7)} ${finding.category.padEnd(9)}  ` +
+        `${location.padEnd(19)}${finding.ruleId.padEnd(16)}${formatMessage(finding.message)}\n`,
+    );
+  });
+  if (findings.length > FINDINGS_PRINT_LIMIT) {
+    process.stdout.write(`  … and ${findings.length - FINDINGS_PRINT_LIMIT} more\n`);
+  }
 }
 
 function parseFlags(args: string[]): Flags {
@@ -67,8 +92,18 @@ export async function runCommand(args: string[]): Promise<number> {
     return 2;
   }
 
+  // Best-effort: a parser error must never fail the run itself.
+  let findings: FindingsWithFingerprint[] | null;
+  try {
+    findings = parseReport(report);
+  } catch {
+    findings = null;
+  }
+
   if (json) {
-    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ ...report, findings: findings ?? [] }, null, 2)}\n`,
+    );
     return result.exitCode;
   }
 
@@ -80,6 +115,12 @@ export async function runCommand(args: string[]): Promise<number> {
   process.stdout.write(
     `SUMMARY: ${report.summary.passed}/${report.summary.total} passed\n`,
   );
+
+  if (findings === null) {
+    process.stdout.write("  (could not parse report)\n");
+  } else {
+    printFindings(findings);
+  }
 
   if (!noCache) {
     appendRun(toCacheRun(report, result.exitCode));

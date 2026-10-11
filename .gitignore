@@ -28,3 +28,6 @@ Thumbs.db
 !.vscode/extensions.json
 package-lock.json
 nohup.out
+
+# cicured local cache
+.sft/

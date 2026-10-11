@@ -1,5 +1,6 @@
 {
   "patchDiff": "--- a/src/app.ts\n+++ b/src/app.ts\n@@ -10,3 +10,3 @@\n-const total: string = sum(1, 2);\n+const total: number = sum(1, 2);\n",
   "explanation": "Widen the annotation to number to match sum's return type.",
-  "confidence": 0.91
+  "confidence": 0.91,
+  "filesTouched": ["src/app.ts"]
 }

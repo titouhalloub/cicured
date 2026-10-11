@@ -1,0 +1,61 @@
+{
+  "name": "@cicured/cli",
+  "version": "0.1.0",
+  "description": "Local build runner with optional AI fixes. The free, open-source CLI behind cicured.com.",
+  "license": "MIT",
+  "author": "Reda Halloub",
+  "homepage": "https://cicured.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/titouhalloub/cicured.git",
+    "directory": "packages/cli"
+  },
+  "bugs": "https://github.com/titouhalloub/cicured/issues",
+  "keywords": [
+    "ci",
+    "build",
+    "cli",
+    "developer-tools",
+    "ai",
+    "typecheck",
+    "lint",
+    "test"
+  ],
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "sft": "./bin/sft.mjs"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@cicured/sft": "workspace:*",
+    "@sft/schemas": "workspace:*",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.0",
+    "eslint": "^10.11.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.2"
+  }
+}

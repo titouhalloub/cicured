@@ -1,13 +1,48 @@
 {
-  "name": "@sft/runner",
+  "name": "@cicured/sft",
   "version": "0.1.0",
-  "private": true,
-  "description": "Pinned SFT-Dev build runner (sft-dev.mjs) and its contract tests - Spec §2",
-  "files": ["sft-dev.mjs"],
+  "description": "Sandboxed build runner. Type Check, Lint, Build, Tests in one command, with a machine-readable JSON report.",
+  "license": "MIT",
+  "author": "Reda Halloub",
+  "homepage": "https://cicured.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/titouhalloub/cicured.git",
+    "directory": "packages/runner"
+  },
+  "bugs": "https://github.com/titouhalloub/cicured/issues",
+  "keywords": [
+    "ci",
+    "build",
+    "runner",
+    "typecheck",
+    "lint",
+    "test",
+    "sandbox",
+    "developer-tools"
+  ],
+  "type": "module",
+  "main": "sft-dev.mjs",
+  "bin": {
+    "sft": "./bin/sft.mjs"
+  },
+  "files": [
+    "sft-dev.mjs",
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/node": "^24.19.0",

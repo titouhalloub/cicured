@@ -8,3 +8,5 @@
 - Every feature ships with tests. Run `pnpm -r typecheck && pnpm -r lint && pnpm -r test` before declaring done.
 - Ask before adding a dependency that is not already in §0.
 - Commit per logical step with conventional commit messages.
+
+- Do NOT run `git checkout -- .`, `git clean`, `git reset`, or any command that discards uncommitted work. If you need a clean state, STOP and ask.

@@ -16,15 +16,15 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Projects", href: "/projects", icon: FolderGit2 },
-  { label: "Runs", href: "/runs", icon: PlayCircle },
+  { label: "Dashboard", href: "/app", icon: LayoutDashboard },
+  { label: "Projects", href: "/app/projects", icon: FolderGit2 },
+  { label: "Runs", href: "/app/runs", icon: PlayCircle },
   // TODO(M4b-3): settings page does not exist yet.
-  { label: "Settings", href: "/settings", icon: Settings, disabled: true },
+  { label: "Settings", href: "/app/settings", icon: Settings, disabled: true },
 ];
 
 function isActive(pathname: string, href: string): boolean {
-  if (href === "/") return pathname === "/";
+  if (href === "/app") return pathname === "/app";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

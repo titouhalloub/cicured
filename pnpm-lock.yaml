@@ -457,6 +457,9 @@ importers:
       '@cicured/sft':
         specifier: workspace:*
         version: link:../runner
+      '@sft/parser':
+        specifier: workspace:*
+        version: link:../parser
       '@sft/schemas':
         specifier: workspace:*
         version: link:../schemas

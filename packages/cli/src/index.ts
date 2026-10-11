@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { graphCommand } from "./commands/graph";
 import { initCommand } from "./commands/init";
 import { logsCommand } from "./commands/logs";
 import { loginCommand } from "./commands/login";
@@ -14,6 +15,7 @@ Usage:
   sft logs [--limit N]            Show recent local runs (default 10)
   sft init                        Write a sft-dev.config.json template
   sft suggest                     Ask Claude to fix the last failure (BYOK)
+  sft graph [--json]              Build a code graph of the current repo
   sft login                       Sign in to cicured.com (coming soon)
   sft sync                        Upload local history (coming soon)
   sft --version                   Print version`;
@@ -40,6 +42,8 @@ async function dispatch(argv: string[]): Promise<number> {
       return initCommand();
     case "suggest":
       return suggestCommand(rest);
+    case "graph":
+      return graphCommand(rest);
     case "login":
       return loginCommand();
     case "sync":

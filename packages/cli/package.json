@@ -47,6 +47,7 @@
   },
   "dependencies": {
     "@cicured/sft": "workspace:*",
+    "@sft/parser": "workspace:*",
     "@sft/schemas": "workspace:*",
     "zod": "^4.6.5"
   },

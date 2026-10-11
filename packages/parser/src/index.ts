@@ -10,6 +10,22 @@ export { parseEslint, stripRepoPrefix } from "./parsers/eslint";
 export { parseJest } from "./parsers/jest";
 export { parseTask } from "./parsers/index";
 
+// Explicit (not `export *`) so Node's CJS named-export lexer sees these when
+// `bin/sft.mjs` runs the CLI through tsx — `export *` names are invisible to
+// static named imports at runtime and crash `sft graph` at link time.
+export {
+  DEFAULT_EXCLUDE_PATTERNS,
+  DEFAULT_MAX_FILES,
+  DEFAULT_TEST_PATTERNS,
+  blastRadiusFor,
+  buildCodeGraph,
+  findFile,
+  findFunction,
+  readCachedGraph,
+  writeCachedGraph,
+} from "./codegraph";
+export type { BuildOptions, Neighborhood } from "./codegraph";
+
 /**
  * Deterministic findings parser (Spec §4 step 8: deterministic first, no
  * LLM). tsc parsing + fingerprints land in M3a; eslint / jest-vitest /

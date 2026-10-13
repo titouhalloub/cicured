@@ -20,9 +20,10 @@ import { RUNNER_PATH } from "./helpers";
  * "tool missing" case.
  */
 
-/** Directories holding the python3 / go stand-ins; prepended to PATH as needed. */
+/** Directories holding the python3 / go / semgrep stand-ins; prepended to PATH as needed. */
 const PY3_SHIM_DIR = mkdtempSync(path.join(tmpdir(), "sft-py3-"));
 const GO_SHIM_DIR = mkdtempSync(path.join(tmpdir(), "sft-go-"));
+const SEMGREP_SHIM_DIR = mkdtempSync(path.join(tmpdir(), "sft-semgrep-"));
 /** A path that never exists, so a bare spawn fails with ENOENT. */
 const MISSING_PATH_DIR = path.join(tmpdir(), "sft-tools-absent-does-not-exist");
 
@@ -30,11 +31,12 @@ const MISSING_PATH_DIR = path.join(tmpdir(), "sft-tools-absent-does-not-exist");
 const fixtures: string[] = [];
 
 beforeAll(() => {
-  // `node --version` exits 0 — enough for hasPython3()/hasGo(), which only
-  // check that the spawn did not error.
+  // `node --version` exits 0 — enough for hasPython3()/hasGo()/hasSemgrep(),
+  // which only check that the spawn did not error.
   for (const [dir, exe] of [
     [PY3_SHIM_DIR, "python3"],
     [GO_SHIM_DIR, "go"],
+    [SEMGREP_SHIM_DIR, "semgrep"],
   ] as const) {
     const shim = path.join(dir, process.platform === "win32" ? `${exe}.exe` : exe);
     copyFileSync(process.execPath, shim);
@@ -45,6 +47,7 @@ beforeAll(() => {
 afterAll(() => {
   rmSync(PY3_SHIM_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   rmSync(GO_SHIM_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  rmSync(SEMGREP_SHIM_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 });
 
 afterEach(() => {
@@ -69,6 +72,7 @@ function detect(
   dirs: string[] = [],
   python3: boolean = true,
   go: boolean = true,
+  semgrep: boolean = true,
 ): DetectResult {
   const cwd = mkdtempSync(path.join(tmpdir(), "sft-detect-"));
   fixtures.push(cwd);
@@ -85,13 +89,15 @@ function detect(
   const prefixes: string[] = [];
   if (python3) prefixes.push(PY3_SHIM_DIR);
   if (go) prefixes.push(GO_SHIM_DIR);
+  if (semgrep) prefixes.push(SEMGREP_SHIM_DIR);
   // A tool marked absent must not be reachable at all, so the host PATH is
   // dropped whenever any tool is missing — otherwise the host's real
-  // `python3`/`go` (or, on Windows, the hanging Store alias stub) leaks in.
+  // `python3`/`go`/`semgrep` (or, on Windows, the hanging Store alias stub)
+  // leaks in.
   const pathValue =
     prefixes.length === 0
       ? MISSING_PATH_DIR
-      : python3 && go
+      : python3 && go && semgrep
         ? [...prefixes, hostPath].join(path.delimiter)
         : prefixes.join(path.delimiter);
   const env: NodeJS.ProcessEnv = {};
@@ -240,5 +246,45 @@ describe("detectGoTasks via --detect-only", () => {
     expect(names(result)).not.toContain("Go Tests");
     expect(names(result)).not.toContain("Go Vet");
     expect(result.warnings.some((w) => /go not found on PATH/.test(w))).toBe(true);
+  });
+});
+
+describe("detectSemgrepTasks via --detect-only", () => {
+  const securityTask = (result: DetectResult): DetectedTask | undefined =>
+    result.tasks.find((t) => t.name === "Security");
+
+  it("semgrep on PATH adds Security", () => {
+    const result = detect({ "package.json": '{"scripts": {"test": "vitest run"}}\n' });
+
+    const task = securityTask(result);
+    expect(task).toBeDefined();
+    expect(task?.command).toContain("--config auto");
+    expect(task?.command).toContain("--metrics=off");
+  });
+
+  it("semgrep missing adds no Security task and no warning", () => {
+    const result = detect({ "package.json": '{"scripts": {"test": "vitest run"}}\n' }, [], true, true, false);
+
+    expect(names(result)).not.toContain("Security");
+    // Unlike Python/Go there is no signal a repo *needs* Semgrep, so a missing
+    // binary is deliberately silent — no warning at all.
+    expect(result.warnings).toEqual([]);
+  });
+
+  it("mixed repo gets Tests, Python Tests, Go Tests, and Security", () => {
+    const result = detect(
+      {
+        "package.json": '{"scripts": {"test": "vitest run"}}\n',
+        "pyproject.toml": '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n',
+        "go.mod": "module example.com/foo\n\ngo 1.23\n",
+        "foo_test.go": "package foo\n",
+      },
+    );
+    const list = names(result);
+    expect(list).toContain("Tests");
+    expect(list).toContain("Python Tests");
+    expect(list).toContain("Go Tests");
+    expect(list).toContain("Security");
+    expect(new Set(list).size).toBe(list.length);
   });
 });

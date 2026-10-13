@@ -37,6 +37,15 @@ RUN apk add --no-cache go
 # pnpm store cache).
 RUN apk add --no-cache go
 
+# Semgrep (Phase 3a): multi-language SAST. Installed via pip because Alpine's
+# apk repos don't carry a current semgrep package. The version is pinned —
+# Semgrep's rule registry evolves, and a floating version would change findings
+# without a cicured commit. --break-system-packages is required on Alpine 3.19+
+# (PEP 668), same as the Python toolchain install. --config auto fetches rules
+# on first run and caches them in the container tmpfs (destroyed on exit); a
+# future phase may mount a rule cache, same pattern as the pnpm store.
+RUN pip install --no-cache-dir --break-system-packages semgrep==1.173.0
+
 COPY docker/sandbox/entrypoint.sh /opt/sft/entrypoint.sh
 RUN chmod +x /opt/sft/entrypoint.sh
 

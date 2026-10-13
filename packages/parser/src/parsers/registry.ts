@@ -5,6 +5,7 @@ import { parseGoVet } from "./go-vet";
 import { parseJest } from "./jest";
 import { parsePytest } from "./pytest";
 import { parseRuff } from "./ruff";
+import { parseSemgrep } from "./semgrep";
 import { parseTsc } from "./tsc";
 
 /**
@@ -38,6 +39,7 @@ export const PARSERS: Record<string, Parser> = {
   ruff: { id: "ruff", parse: parseRuff },
   "go-test": { id: "go-test", parse: parseGoTest },
   "go-vet": { id: "go-vet", parse: parseGoVet },
+  semgrep: { id: "semgrep", parse: parseSemgrep },
 };
 
 /**
@@ -53,4 +55,5 @@ export const TASK_NAME_TO_PARSER: Record<string, string> = {
   "Python Lint": "ruff",
   "Go Tests": "go-test",
   "Go Vet": "go-vet",
+  "Security": "semgrep",
 };

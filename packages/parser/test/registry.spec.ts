@@ -61,6 +61,10 @@ describe("parser registry", () => {
     expect(TASK_NAME_TO_PARSER["Go Vet"]).toBe("go-vet");
   });
 
+  it("TASK_NAME_TO_PARSER maps Security to semgrep", () => {
+    expect(TASK_NAME_TO_PARSER["Security"]).toBe("semgrep");
+  });
+
   it("TASK_NAME_TO_PARSER does not include 'Build'", () => {
     // Deliberate omission: the runner's Build task has no parser until M4
     // decides on next-build parsing; the lookup miss maps to [].

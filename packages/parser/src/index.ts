@@ -12,6 +12,7 @@ export { parsePytest } from "./parsers/pytest";
 export { parseRuff } from "./parsers/ruff";
 export { parseGoTest } from "./parsers/go-test";
 export { parseGoVet } from "./parsers/go-vet";
+export { parseSemgrep } from "./parsers/semgrep";
 export { parseTask } from "./parsers/index";
 export type { Parser } from "./parsers/registry";
 export { PARSERS, TASK_NAME_TO_PARSER } from "./parsers/registry";

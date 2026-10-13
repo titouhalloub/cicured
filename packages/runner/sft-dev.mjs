@@ -58,6 +58,7 @@ function detectTasks() {
   // names never collide with the Node/TS ones.
   for (const task of detectPythonTasks()) tasks.push(task);
   for (const task of detectGoTasks()) tasks.push(task);
+  for (const task of detectSemgrepTasks()) tasks.push(task);
   return tasks;
 }
 
@@ -124,6 +125,19 @@ function detectGoTasks() {
   const tasks = [{ name: "Go Vet", command: "go vet ./..." }];
   if (hasGoTestFile(".", 1)) tasks.push({ name: "Go Tests", command: "go test -json ./..." });
   return tasks;
+}
+
+// Semgrep probe (Phase 3a): multi-language SAST. Unlike Python/Go there is no
+// repo signal that *needs* Semgrep — it auto-detects languages from the files
+// present — so a missing binary is silent (no warning). --metrics=off keeps the
+// tool local-first; --quiet keeps stdout to JSON only.
+function hasSemgrep() {
+  try { return !spawnSync("semgrep", ["--version"], { stdio: "ignore" }).error; } catch { return false; }
+}
+
+function detectSemgrepTasks() {
+  if (!hasSemgrep()) return [];
+  return [{ name: "Security", command: "semgrep scan --json --config auto --quiet --metrics=off ." }];
 }
 
 function loadConfig() {

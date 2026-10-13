@@ -1,0 +1,29 @@
+{
+  "version": "1.173.0",
+  "results": [
+    {
+      "check_id": "javascript.lang.security.audit.sqli.node-mysql-sqli",
+      "path": "/workspace/repo/src/db.ts",
+      "start": { "line": 42, "col": 5, "offset": 1000 },
+      "end": { "line": 42, "col": 30, "offset": 1025 },
+      "extra": {
+        "message": "Detected SQL query built from user input.",
+        "severity": "ERROR",
+        "metadata": { "category": "security", "confidence": "HIGH" }
+      }
+    },
+    {
+      "check_id": "python.lang.security.audit.exec-detected",
+      "path": "/workspace/repo/app.py",
+      "start": { "line": 10, "col": 1, "offset": 200 },
+      "end": { "line": 10, "col": 20, "offset": 219 },
+      "extra": {
+        "message": "Detected use of exec().",
+        "severity": "MEDIUM",
+        "metadata": { "category": "security", "confidence": "MEDIUM" }
+      }
+    }
+  ],
+  "errors": [],
+  "paths": { "scanned": ["/workspace/repo/src/db.ts", "/workspace/repo/app.py"] }
+}

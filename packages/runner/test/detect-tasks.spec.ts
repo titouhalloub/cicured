@@ -6,38 +6,45 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { RUNNER_PATH } from "./helpers";
 
 /**
- * Detection tests for the Phase 3d-1 Python task matrix.
+ * Detection tests for the runner's auto-detected task matrix — Phase 3d-1
+ * Python, Phase 3d-3 Go.
  *
- * The runner is spawned with --detect-only (Phase 3d-1 fixup), which prints
- * `{ tasks, warnings }` as JSON and exits 0 without running anything — the
- * whole detection matrix is observable without a toolchain on the host.
+ * The runner is spawned with --detect-only, which prints `{ tasks, warnings }`
+ * as JSON and exits 0 without running anything — the whole detection matrix is
+ * observable without a toolchain on the host.
  *
- * hasPython3() spawns a bare `python3`, so PATH is controlled per test: a
- * node-backed stand-in is prepended when the interpreter must appear present
+ * hasPython3()/hasGo() spawn a bare `python3`/`go`, so PATH is controlled per
+ * test: node-backed stand-ins are prepended when a tool must appear present
  * (the Windows Store `python3` alias stub hangs on spawn, and CI images may
- * not ship python3), and pointed at a nonexistent directory for the
- * "interpreter missing" case.
+ * not ship either tool), and pointed at a nonexistent directory for the
+ * "tool missing" case.
  */
 
-/** Directory holding the python3 stand-in; prepended to PATH when needed. */
-const SHIM_DIR = mkdtempSync(path.join(tmpdir(), "sft-py3-"));
-const SHIM_EXE = process.platform === "win32" ? "python3.exe" : "python3";
-/** A path that never exists, so `spawnSync("python3", ...)` fails with ENOENT. */
-const MISSING_PATH_DIR = path.join(tmpdir(), "sft-py3-absent-does-not-exist");
+/** Directories holding the python3 / go stand-ins; prepended to PATH as needed. */
+const PY3_SHIM_DIR = mkdtempSync(path.join(tmpdir(), "sft-py3-"));
+const GO_SHIM_DIR = mkdtempSync(path.join(tmpdir(), "sft-go-"));
+/** A path that never exists, so a bare spawn fails with ENOENT. */
+const MISSING_PATH_DIR = path.join(tmpdir(), "sft-tools-absent-does-not-exist");
 
 /** Fixture dirs created by detect(), removed in afterEach. */
 const fixtures: string[] = [];
 
 beforeAll(() => {
-  // `node --version` exits 0 — enough for hasPython3(), which only checks
-  // that the spawn did not error.
-  const shim = path.join(SHIM_DIR, SHIM_EXE);
-  copyFileSync(process.execPath, shim);
-  if (process.platform !== "win32") chmodSync(shim, 0o755);
+  // `node --version` exits 0 — enough for hasPython3()/hasGo(), which only
+  // check that the spawn did not error.
+  for (const [dir, exe] of [
+    [PY3_SHIM_DIR, "python3"],
+    [GO_SHIM_DIR, "go"],
+  ] as const) {
+    const shim = path.join(dir, process.platform === "win32" ? `${exe}.exe` : exe);
+    copyFileSync(process.execPath, shim);
+    if (process.platform !== "win32") chmodSync(shim, 0o755);
+  }
 });
 
 afterAll(() => {
-  rmSync(SHIM_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  rmSync(PY3_SHIM_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  rmSync(GO_SHIM_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 });
 
 afterEach(() => {
@@ -61,6 +68,7 @@ function detect(
   files: Record<string, string>,
   dirs: string[] = [],
   python3: boolean = true,
+  go: boolean = true,
 ): DetectResult {
   const cwd = mkdtempSync(path.join(tmpdir(), "sft-detect-"));
   fixtures.push(cwd);
@@ -74,7 +82,18 @@ function detect(
   // Windows exposes the variable as "Path", POSIX as "PATH" — drop both
   // before setting ours so the host PATH cannot win.
   const hostPath = process.env.Path ?? process.env.PATH ?? "";
-  const pathValue = python3 ? [SHIM_DIR, hostPath].join(path.delimiter) : MISSING_PATH_DIR;
+  const prefixes: string[] = [];
+  if (python3) prefixes.push(PY3_SHIM_DIR);
+  if (go) prefixes.push(GO_SHIM_DIR);
+  // A tool marked absent must not be reachable at all, so the host PATH is
+  // dropped whenever any tool is missing — otherwise the host's real
+  // `python3`/`go` (or, on Windows, the hanging Store alias stub) leaks in.
+  const pathValue =
+    prefixes.length === 0
+      ? MISSING_PATH_DIR
+      : python3 && go
+        ? [...prefixes, hostPath].join(path.delimiter)
+        : prefixes.join(path.delimiter);
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined || key.toUpperCase() === "PATH") continue;
@@ -181,4 +200,45 @@ describe("detectPythonTasks via --detect-only", () => {
   });
 });
 
+describe("detectGoTasks via --detect-only", () => {
+  it("go.mod adds Go Vet", () => {
+    const result = detect({ "go.mod": "module example.com/foo\n\ngo 1.23\n" });
+    expect(names(result)).toContain("Go Vet");
+  });
 
+  it("go.mod plus a *_test.go file adds Go Tests and Go Vet", () => {
+    const result = detect(
+      { "go.mod": "module example.com/foo\n\ngo 1.23\n", "foo_test.go": "package foo\n" },
+    );
+    expect(names(result)).toContain("Go Tests");
+    expect(names(result)).toContain("Go Vet");
+  });
+
+  it("go.mod without any *_test.go adds Go Vet only", () => {
+    const result = detect(
+      { "go.mod": "module example.com/foo\n\ngo 1.23\n", "foo.go": "package foo\n" },
+    );
+    expect(names(result)).toContain("Go Vet");
+    expect(names(result)).not.toContain("Go Tests");
+  });
+
+  it("no go.mod adds neither Go task", () => {
+    const result = detect({ "package.json": '{"scripts": {"test": "vitest run"}}\n' });
+    expect(names(result)).not.toContain("Go Tests");
+    expect(names(result)).not.toContain("Go Vet");
+  });
+
+  it("go missing on PATH yields a warning and no Go tasks", () => {
+    // python3 stays shimmed — the Go fixtures carry no Python signal, so the
+    // python3 path is never reached and only `go` is absent from PATH.
+    const result = detect(
+      { "go.mod": "module example.com/foo\n\ngo 1.23\n", "foo_test.go": "package foo\n" },
+      [],
+      true,
+      false,
+    );
+    expect(names(result)).not.toContain("Go Tests");
+    expect(names(result)).not.toContain("Go Vet");
+    expect(result.warnings.some((w) => /go not found on PATH/.test(w))).toBe(true);
+  });
+});

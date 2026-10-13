@@ -57,6 +57,7 @@ function detectTasks() {
   // Phase 3d-1: Python tasks are additive — mixed repos get both sets and the
   // names never collide with the Node/TS ones.
   for (const task of detectPythonTasks()) tasks.push(task);
+  for (const task of detectGoTasks()) tasks.push(task);
   return tasks;
 }
 
@@ -92,6 +93,36 @@ function detectPythonTasks() {
   const tasks = [];
   if (pytestSignal) tasks.push({ name: "Python Tests", command: "python3 -m pytest -v --no-header --tb=short" });
   if (ruffSignal) tasks.push({ name: "Python Lint", command: "ruff check --output-format=json ." });
+  return tasks;
+}
+
+// Go toolchain probe (Phase 3d-3): mirrors hasPython3() — a module without a
+// runnable `go` skips gracefully with a warning instead of failing every Go
+// task at spawn time.
+function hasGo() {
+  try { return !spawnSync("go", ["version"], { stdio: "ignore" }).error; } catch { return false; }
+}
+
+/** Shallow walk (max depth 3) for a *_test.go file, skipping vendor/ and .git/. */
+function hasGoTestFile(dir, depth) {
+  if (depth > 3) return false;
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return false; }
+  for (const entry of entries) {
+    if (entry.isFile() && /_test\.go$/.test(entry.name)) return true;
+    if (entry.isDirectory() && entry.name !== "vendor" && entry.name !== ".git" && hasGoTestFile(path.join(dir, entry.name), depth + 1)) return true;
+  }
+  return false;
+}
+
+function detectGoTasks() {
+  if (!existsSync("go.mod")) return [];
+  if (!hasGo()) {
+    warnings.push("go not found on PATH; skipping Go tasks");
+    return [];
+  }
+  const tasks = [{ name: "Go Vet", command: "go vet ./..." }];
+  if (hasGoTestFile(".", 1)) tasks.push({ name: "Go Tests", command: "go test -json ./..." });
   return tasks;
 }
 

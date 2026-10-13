@@ -1,0 +1,6 @@
+# example.com/foo
+foo.go:42:5: non-constant format string in call to fmt.Sprintf
+bar.go:10:3: printf: fmt.Sprintf call needs 1 arg but has 2 args
+
+# example.com/foo/bar
+baz.go:7:1: unreachable code

@@ -56,6 +56,11 @@ describe("parser registry", () => {
     expect(PARSERS["jest"]!.parse).toBe(PARSERS["vitest"]!.parse);
   });
 
+  it("TASK_NAME_TO_PARSER maps Go task names", () => {
+    expect(TASK_NAME_TO_PARSER["Go Tests"]).toBe("go-test");
+    expect(TASK_NAME_TO_PARSER["Go Vet"]).toBe("go-vet");
+  });
+
   it("TASK_NAME_TO_PARSER does not include 'Build'", () => {
     // Deliberate omission: the runner's Build task has no parser until M4
     // decides on next-build parsing; the lookup miss maps to [].

@@ -1,5 +1,7 @@
 import type { ParsedFinding } from "../types";
 import { parseEslint } from "./eslint";
+import { parseGoTest } from "./go-test";
+import { parseGoVet } from "./go-vet";
 import { parseJest } from "./jest";
 import { parsePytest } from "./pytest";
 import { parseRuff } from "./ruff";
@@ -34,6 +36,8 @@ export const PARSERS: Record<string, Parser> = {
   vitest: { id: "vitest", parse: parseJest },
   pytest: { id: "pytest", parse: parsePytest },
   ruff: { id: "ruff", parse: parseRuff },
+  "go-test": { id: "go-test", parse: parseGoTest },
+  "go-vet": { id: "go-vet", parse: parseGoVet },
 };
 
 /**
@@ -47,4 +51,6 @@ export const TASK_NAME_TO_PARSER: Record<string, string> = {
   "Tests": "jest",
   "Python Tests": "pytest",
   "Python Lint": "ruff",
+  "Go Tests": "go-test",
+  "Go Vet": "go-vet",
 };

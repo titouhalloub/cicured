@@ -26,6 +26,17 @@ RUN apk add --no-cache git bash ca-certificates \
 RUN apk add --no-cache python3 py3-pip && \
     pip install --no-cache-dir --break-system-packages pytest ruff
 
+# Go toolchain (Phase 3d-3): the Go binary only. No module cache is warmed
+# here — the first sandbox run on a Go repo downloads modules from the network
+# (known limitation, deferred to a future phase; same pattern as pnpm store).
+RUN apk add --no-cache go
+
+# Go toolchain (Phase 3d-3): `go` on PATH for the runner's "Go Vet" /
+# "Go Tests" tasks. No warm module cache — the first sandbox run on a Go repo
+# downloads modules from the network (known limitation, deferred like the
+# pnpm store cache).
+RUN apk add --no-cache go
+
 COPY docker/sandbox/entrypoint.sh /opt/sft/entrypoint.sh
 RUN chmod +x /opt/sft/entrypoint.sh
 

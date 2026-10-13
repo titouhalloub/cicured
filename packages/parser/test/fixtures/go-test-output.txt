@@ -1,0 +1,20 @@
+{"Time":"2025-01-04T10:00:00.100000000Z","Action":"start","Package":"example.com/foo"}
+{"Time":"2025-01-04T10:00:00.100100000Z","Action":"run","Package":"example.com/foo","Test":"TestOK"}
+{"Time":"2025-01-04T10:00:00.100200000Z","Action":"output","Package":"example.com/foo","Test":"TestOK","Output":"=== RUN   TestOK\n"}
+{"Time":"2025-01-04T10:00:00.100300000Z","Action":"output","Package":"example.com/foo","Test":"TestOK","Output":"--- PASS: TestOK (0.00s)\n"}
+{"Time":"2025-01-04T10:00:00.100400000Z","Action":"pass","Package":"example.com/foo","Test":"TestOK","Elapsed":0.001}
+{"Time":"2025-01-04T10:00:00.100500000Z","Action":"run","Package":"example.com/foo","Test":"TestFoo"}
+{"Time":"2025-01-04T10:00:00.100600000Z","Action":"output","Package":"example.com/foo","Test":"TestFoo","Output":"=== RUN   TestFoo\n"}
+{"Time":"2025-01-04T10:00:00.100700000Z","Action":"output","Package":"example.com/foo","Test":"TestFoo","Output":"    foo_test.go:42: expected 1, got 2\n"}
+{"Time":"2025-01-04T10:00:00.100800000Z","Action":"output","Package":"example.com/foo","Test":"TestFoo","Output":"--- FAIL: TestFoo (0.00s)\n"}
+{"Time":"2025-01-04T10:00:00.100900000Z","Action":"fail","Package":"example.com/foo","Test":"TestFoo","Elapsed":0.002}
+{"Time":"2025-01-04T10:00:00.101000000Z","Action":"output","Package":"example.com/foo","Output":"FAIL\n"}
+{"Time":"2025-01-04T10:00:00.101100000Z","Action":"output","Package":"example.com/foo","Output":"FAIL\texample.com/foo\t0.003s\n"}
+{"Time":"2025-01-04T10:00:00.101200000Z","Action":"fail","Package":"example.com/foo","Elapsed":0.003}
+{"Time":"2025-01-04T10:00:00.101300000Z","Action":"output","Package":"example.com/bar","Output":"?   \texample.com/bar\t[no test files]\n"}
+{"Time":"2025-01-04T10:00:00.101400000Z","Action":"skip","Package":"example.com/bar","Elapsed":0}
+{"Time":"2025-01-04T10:00:00.101500000Z","Action":"output","Package":"example.com/baz","Output":"=== RUN   TestSkip\n"}
+{"Time":"2025-01-04T10:00:00.101600000Z","Action":"output","Package":"example.com/baz","Test":"TestSkip","Output":"    baz_test.go:9: skipping: no database\n"}
+{"Time":"2025-01-04T10:00:00.101700000Z","Action":"output","Package":"example.com/baz","Test":"TestSkip","Output":"--- SKIP: TestSkip (0.00s)\n"}
+{"Time":"2025-01-04T10:00:00.101800000Z","Action":"skip","Package":"example.com/baz","Test":"TestSkip","Elapsed":0}
+{"Time":"2025-01-04T10:00:00.101900000Z","Action":"pass","Package":"example.com/baz","Elapsed":0.001}

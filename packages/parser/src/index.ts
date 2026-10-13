@@ -10,6 +10,8 @@ export { parseEslint, stripRepoPrefix } from "./parsers/eslint";
 export { parseJest } from "./parsers/jest";
 export { parsePytest } from "./parsers/pytest";
 export { parseRuff } from "./parsers/ruff";
+export { parseGoTest } from "./parsers/go-test";
+export { parseGoVet } from "./parsers/go-vet";
 export { parseTask } from "./parsers/index";
 export type { Parser } from "./parsers/registry";
 export { PARSERS, TASK_NAME_TO_PARSER } from "./parsers/registry";

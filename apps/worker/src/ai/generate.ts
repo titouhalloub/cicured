@@ -1,7 +1,7 @@
 import { SuggestionDraft, type SuggestionDraft as SuggestionDraftType } from "@sft/schemas";
-import type { FindingsWithFingerprint } from "@sft/parser";
+import type { FindingsWithFingerprint, Neighborhood } from "@sft/parser";
 import type { WorkerLogger } from "../common/secrets";
-import { buildSuggestionPrompt, CONTEXT_CHAR_BUDGET } from "./context";
+import { buildNeighborhoodBlock, buildSuggestionPrompt, CONTEXT_CHAR_BUDGET } from "./context";
 import { computeCacheKey } from "./cache";
 import type { LlmMessage, LlmProvider, LlmResponse } from "./provider";
 import type { LlmCache } from "./cache";
@@ -39,6 +39,34 @@ export interface GenerateSuggestionsOptions {
   temperature: number;
   maxOutputTokens: number;
   findingsPerRunCap: number;
+  /** Phase 3c-2: code graph neighborhood per finding, keyed by fingerprint.
+   * Absent or null restores the pre-graph behavior exactly. */
+  neighborhoods?: ReadonlyMap<string, Neighborhood | null>;
+}
+
+/**
+ * Phase 3c-2: when a neighborhood is known, every patched file must be the
+ * finding's own repo-relative file or a file in the neighborhood — mirroring
+ * the CLI check so a wandering model is rejected instead of cached.
+ */
+function assertFilesTouchedInNeighborhood(
+  filesTouched: string[],
+  finding: FindingsWithId,
+  neighborhood: Neighborhood | null,
+): void {
+  if (neighborhood === null) return;
+  const relFindingFile = finding.file.replace(/^\/workspace\/repo\//, "");
+  const allowed = new Set<string>([
+    relFindingFile,
+    neighborhood.file.path,
+    ...neighborhood.callers.map((caller) => caller.file),
+    ...neighborhood.callees.map((callee) => callee.file),
+  ]);
+  for (const file of filesTouched) {
+    if (!allowed.has(file)) {
+      throw new Error(`filesTouched outside neighborhood: ${file}`);
+    }
+  }
 }
 
 /**
@@ -70,6 +98,11 @@ export async function generateSuggestions(
 
   for (const finding of limited) {
     try {
+      // Phase 3c-2: neighborhood precomputed by run-job from the sandbox's
+      // sft-graph.json. Null (or absent) disables the neighborhood block and
+      // the filesTouched containment check.
+      const neighborhood = options.neighborhoods?.get(finding.fingerprint) ?? null;
+
       const snippet = await snippetFor(finding);
       if (!snippet) {
         options.logger.info(`No snippet for finding ${finding.id}`);
@@ -116,7 +149,7 @@ export async function generateSuggestions(
         ...finding,
         message: redactedMessage.cleaned,
       };
-      const prompt = buildSuggestionPrompt(redactedFinding, redactedSnippet.cleaned);
+      const prompt = buildSuggestionPrompt(redactedFinding, redactedSnippet.cleaned, neighborhood);
       const message: LlmMessage = {
         system: prompt.system,
         user: prompt.user,
@@ -149,6 +182,7 @@ export async function generateSuggestions(
           if (!validated.success) {
             throw new Error("Zod validation failed");
           }
+          assertFilesTouchedInNeighborhood(validated.data.filesTouched, finding, neighborhood);
           parsed = validated.data;
           break;
         } catch (parseErr) {
@@ -172,7 +206,7 @@ export async function generateSuggestions(
 }
 
 filesTouched must list every file the patch modifies, using repo-relative forward-slash paths. Do not list files outside the finding's file or its immediate callers.
-
+${neighborhood === null ? "" : `\n${buildNeighborhoodBlock(neighborhood)}\n`}
 Error encountered: ${(parseErr as Error).message}
 
 Attempt again.`,

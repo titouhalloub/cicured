@@ -1,5 +1,10 @@
 import { createCipheriv, randomBytes } from "node:crypto";
-import type { FindingsWithFingerprint } from "@sft/parser";
+import { promises as fs } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { blastRadiusFor, type FindingsWithFingerprint } from "@sft/parser";
+import type * as ParserModule from "@sft/parser";
+import type { SuggestionDraft } from "@sft/schemas";
 import { describe, expect, it, vi } from "vitest";
 import type {
   FinalizeRunInput,
@@ -17,7 +22,37 @@ import type { FlushResult, LogArchiver } from "../src/logs/archiver";
 import type { LlmProvider } from "../src/ai/provider";
 import type { LlmCache } from "../src/ai/cache";
 import { createLogger } from "../src/common/secrets";
+import { buildSuggestionPrompt } from "../src/ai/context";
+import type * as ContextModule from "../src/ai/context";
+import type { FindingsWithId } from "../src/ai/generate";
+import type * as GenerateModule from "../src/ai/generate";
 import { makeEnv, TEST_ENCRYPTION_KEY } from "./test-utils";
+
+// Phase 3c-2 spies: wrap the real implementations so the rest of the job flow
+// (report parsing, prompt assembly) keeps working unmodified.
+vi.mock("@sft/parser", async (importOriginal) => {
+  const actual = await importOriginal<typeof ParserModule>();
+  return { ...actual, blastRadiusFor: vi.fn(actual.blastRadiusFor) };
+});
+vi.mock("../src/ai/context", async (importOriginal) => {
+  const actual = await importOriginal<typeof ContextModule>();
+  return { ...actual, buildSuggestionPrompt: vi.fn(actual.buildSuggestionPrompt) };
+});
+// The M4a snippet placeholder returns "" and skips generation before the
+// prompt stage; tests need a snippet to observe the neighborhood threading.
+// Everything else runs through the real implementation.
+vi.mock("../src/ai/generate", async (importOriginal) => {
+  const actual = await importOriginal<typeof GenerateModule>();
+  return {
+    ...actual,
+    generateSuggestions: (
+      findings: Parameters<typeof actual.generateSuggestions>[0],
+      _snippetFor: Parameters<typeof actual.generateSuggestions>[1],
+      options: Parameters<typeof actual.generateSuggestions>[2],
+    ): ReturnType<typeof actual.generateSuggestions> =>
+      actual.generateSuggestions(findings, async () => "const x = 1;", options),
+  };
+});
 
 const RUN_ID = "11111111-1111-4111-8111-111111111111";
 const TOKEN = "ghs_supersecrettokenvalue0123456789";
@@ -452,5 +487,169 @@ describe("run job exit-code matrix (Spec §2)", () => {
     expect(result).toMatchObject({ status: "success", exitCode: 0 });
     expect(calls.finalized).toHaveLength(1);
     expect(calls.finalized[0]).toMatchObject({ status: "success" });
+  });
+});
+
+describe("run-job code graph plumbing (Phase 3c-2)", () => {
+  const FINDING_WITH_ID: FindingsWithId = {
+    id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    severity: "error",
+    category: "typecheck",
+    ruleId: "TS2304",
+    file: "src/x.ts",
+    line: 3,
+    col: 7,
+    message: "Cannot find name 'bar'.",
+    fingerprint: "fp-graph-1",
+  };
+
+  /** A minimal graph that parses as CodeGraph and knows src/x.ts. */
+  const GRAPH = {
+    version: 1,
+    repoRoot: "/repo",
+    gitSha: null,
+    builtAt: "2026-09-30T12:00:00.000Z",
+    files: [
+      {
+        path: "src/x.ts",
+        imports: [],
+        importedBy: [],
+        functions: [
+          {
+            name: "main",
+            file: "src/x.ts",
+            line: 1,
+            callsTo: ["helper"],
+            calledBy: [],
+            referencedIn: [],
+          },
+        ],
+        tests: ["test/x.spec.ts"],
+      },
+      {
+        path: "src/helper.ts",
+        imports: [],
+        importedBy: [],
+        functions: [
+          {
+            name: "helper",
+            file: "src/helper.ts",
+            line: 1,
+            callsTo: [],
+            calledBy: ["main"],
+            referencedIn: [],
+          },
+        ],
+        tests: [],
+      },
+    ],
+    warnings: [],
+  };
+
+  /** The failing report shape used by the finding-persistence test. */
+  function failingReport(): ExtractedReport {
+    return {
+      path: "/reports/sft-report.json",
+      report: {
+        tool: "sft-dev",
+        version: 2,
+        finishedAt: "2026-09-30T12:00:00.000Z",
+        runnerError: null,
+        warnings: [],
+        summary: { total: 1, passed: 0, failed: 1, skipped: 0, totalDurationMs: 10 },
+        tasks: [
+          {
+            name: "Type Check",
+            command: "pnpm -r typecheck",
+            success: false,
+            exitCode: 2,
+            timedOut: false,
+            skipped: false,
+            truncated: false,
+            durationMs: 10,
+            stdout: "src/x.ts(3,7): error TS2304: Cannot find name 'bar'.\n",
+            stderr: "",
+          },
+        ],
+      },
+    };
+  }
+
+  /** Provider returning a valid draft; map-backed cache (no Redis, no network). */
+  function llmStubs() {
+    const provider: LlmProvider = {
+      name: "stub",
+      model: "test-model",
+      complete: async () => ({
+        text: JSON.stringify({
+          patchDiff: "--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1 +1 @@\n-a\n+b\n",
+          explanation: "Fix the missing name.",
+          confidence: 0.9,
+          filesTouched: ["src/x.ts"],
+        }),
+        promptTokens: 10,
+        completionTokens: 10,
+      }),
+    };
+    const store = new Map<string, SuggestionDraft>();
+    const cache: LlmCache = {
+      get: async (key: string) => store.get(key) ?? null,
+      set: async (key: string, value: SuggestionDraft) => {
+        store.set(key, value);
+      },
+    };
+    return { provider, cache };
+  }
+
+  /** Full AI-stage deps with the given graph state staged in REPORTS_DIR. */
+  async function prepareAI(graph: "valid" | "missing" | "malformed") {
+    const { deps } = makeDeps({ wait: { exitCode: 1, timedOut: false }, report: failingReport() });
+    const reportsDir = await fs.mkdtemp(path.join(tmpdir(), "sft-graph-"));
+    if (graph !== "missing") {
+      const staging = path.join(reportsDir, RUN_ID);
+      await fs.mkdir(staging, { recursive: true });
+      const contents = graph === "malformed" ? "{ not json" : JSON.stringify(GRAPH);
+      await fs.writeFile(path.join(staging, "sft-graph.json"), contents, "utf8");
+    }
+    deps.env = { ...deps.env, REPORTS_DIR: reportsDir };
+    deps.repository.getFindingsByFingerprints = async () => [FINDING_WITH_ID];
+    const { provider, cache } = llmStubs();
+    deps.llmProvider = provider;
+    deps.llmCache = cache;
+    vi.mocked(blastRadiusFor).mockClear();
+    vi.mocked(buildSuggestionPrompt).mockClear();
+    return deps;
+  }
+
+  it("reads sft-graph.json from the staging dir when present", async () => {
+    const deps = await prepareAI("valid");
+
+    await createRunJob(deps)(RUN_ID);
+
+    expect(blastRadiusFor).toHaveBeenCalledTimes(1);
+    expect(blastRadiusFor).toHaveBeenCalledWith(expect.anything(), { file: "src/x.ts", line: 3 });
+    expect(buildSuggestionPrompt).toHaveBeenCalledTimes(1);
+    const neighborhood = vi.mocked(buildSuggestionPrompt).mock.calls[0]?.[2];
+    expect(neighborhood).not.toBeNull();
+    expect(neighborhood?.file.path).toBe("src/x.ts");
+    expect(neighborhood?.tests).toEqual(["test/x.spec.ts"]);
+  });
+
+  it("passes null when sft-graph.json is missing", async () => {
+    const deps = await prepareAI("missing");
+
+    await createRunJob(deps)(RUN_ID);
+
+    expect(blastRadiusFor).not.toHaveBeenCalled();
+    expect(buildSuggestionPrompt).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(buildSuggestionPrompt).mock.calls[0]?.[2]).toBeNull();
+  });
+
+  it("passes null when sft-graph.json is unparseable", async () => {
+    const deps = await prepareAI("malformed");
+
+    await expect(createRunJob(deps)(RUN_ID)).resolves.toMatchObject({ status: "failed" });
+
+    expect(vi.mocked(buildSuggestionPrompt).mock.calls[0]?.[2]).toBeNull();
   });
 });

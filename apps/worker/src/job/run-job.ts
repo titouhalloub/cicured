@@ -1,13 +1,16 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import type { FindingsWithFingerprint } from "@sft/parser";
 import {
   assertRunStatusTransition,
+  CodeGraph,
   failureKindForExitCode,
   runStatusForExitCode,
   type FailureKind,
   type RunStatus,
   type SftReportV2,
 } from "@sft/schemas";
-import { parseReport } from "@sft/parser";
+import { blastRadiusFor, parseReport, type Neighborhood } from "@sft/parser";
 import type { LlmCache } from "../ai/cache";
 import type { LlmProvider } from "../ai/provider";
 import { generateSuggestions } from "../ai/generate";
@@ -139,6 +142,37 @@ async function publishEnd(
 }
 
 /**
+ * Phase 3c-2: read the sandbox's sft-graph.json from the staging directory.
+ * The staging dir is deleted when the report is extracted, so this must run
+ * BEFORE classifyOutcome — i.e. at the same point the worker reads
+ * sft-report.json out of the same directory.
+ *
+ * A missing file is expected until the sandbox scanner ships (Phase 3c-3),
+ * so only a present-but-unparseable file warns. Never throws.
+ */
+async function readStagedGraph(
+  reportsDir: string,
+  runId: string,
+  logger: WorkerLogger,
+): Promise<CodeGraph | null> {
+  const source = path.join(path.resolve(reportsDir), runId, "sft-graph.json");
+  let raw: string;
+  try {
+    raw = await fs.readFile(source, "utf8");
+  } catch {
+    return null;
+  }
+  try {
+    const parsed = CodeGraph.safeParse(JSON.parse(raw));
+    if (parsed.success) return parsed.data;
+    logger.warn("sft-graph.json failed schema validation");
+  } catch (error) {
+    logger.warn("sft-graph.json could not be parsed", error);
+  }
+  return null;
+}
+
+/**
  * The whole M2a execution path for one run: claim the row, mint an
  * installation token, run the sandbox, classify the outcome, persist it, and
  * always delete the container.
@@ -218,6 +252,11 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       // (report extraction decides the outcome, not the log upload).
       const flushed = await archiver.flush();
 
+      // Phase 3c-2: read the graph while the staging directory still exists —
+      // report extraction (classifyOutcome) removes it afterwards. Missing is
+      // expected until the sandbox scanner ships; readStagedGraph stays silent.
+      const graph = await readStagedGraph(deps.env.REPORTS_DIR, runId, logger);
+
       const outcome = await classifyOutcome(deps, handle, waitResult, runId);
       assertRunStatusTransition("running", outcome.status);
       const finishedAt = new Date();
@@ -245,6 +284,22 @@ export function createRunJob(deps: RunJobDeps): RunJob {
           parsedFindings.map((finding) => finding.fingerprint),
         );
 
+        // Phase 3c-2: precompute each finding's blast radius from the staged
+        // graph. With no graph every neighborhood is null, restoring the
+        // pre-graph behavior exactly.
+        const neighborhoods = new Map<string, Neighborhood | null>();
+        for (const finding of findingsWithId) {
+          if (graph === null) {
+            neighborhoods.set(finding.fingerprint, null);
+            continue;
+          }
+          const relFile = finding.file.replace(/^\/workspace\/repo\//, "");
+          neighborhoods.set(
+            finding.fingerprint,
+            blastRadiusFor(graph, { file: relFile, line: finding.line }),
+          );
+        }
+
         const options = {
           provider: deps.llmProvider,
           cache: deps.llmCache,
@@ -252,6 +307,7 @@ export function createRunJob(deps: RunJobDeps): RunJob {
           temperature: deps.env.LLM_TEMPERATURE,
           maxOutputTokens: deps.env.LLM_MAX_OUTPUT_TOKENS,
           findingsPerRunCap: deps.env.LLM_FINDINGS_PER_RUN_CAP,
+          neighborhoods,
         };
 
         const drafts = await generateSuggestions(

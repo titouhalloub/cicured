@@ -1,3 +1,4 @@
+import type { Neighborhood } from "@sft/parser";
 import type { SuggestionDraft } from "@sft/schemas";
 import { describe, expect, it } from "vitest";
 import { computeCacheKey, type LlmCache } from "../../src/ai/cache";
@@ -64,7 +65,10 @@ function stubCache(seed?: Map<string, SuggestionDraft>) {
 function options(
   provider: LlmProvider,
   cache: LlmCache,
-  overrides: Partial<{ findingsPerRunCap: number }> = {},
+  overrides: Partial<{
+    findingsPerRunCap: number;
+    neighborhoods: ReadonlyMap<string, Neighborhood | null>;
+  }> = {},
 ) {
   return {
     provider,
@@ -73,6 +77,7 @@ function options(
     temperature: 0.2,
     maxOutputTokens: 2000,
     findingsPerRunCap: overrides.findingsPerRunCap ?? 50,
+    ...(overrides.neighborhoods ? { neighborhoods: overrides.neighborhoods } : {}),
   };
 }
 
@@ -200,6 +205,108 @@ describe("generateSuggestions (Spec §7 M4a pipeline)", () => {
     expect(calls).toHaveLength(2);
     expect(results).toHaveLength(2);
     expect(results.map((r) => r.fingerprint)).toEqual(["fp-cap-0", "fp-cap-1"]);
+  });
+});
+
+describe("generateSuggestions filesTouched validation (Phase 3c-2)", () => {
+  const NEIGHBORHOOD: Neighborhood = {
+    file: {
+      path: "src/app.ts",
+      imports: [],
+      importedBy: [],
+      functions: [],
+      tests: ["test/app.spec.ts"],
+    },
+    function: {
+      name: "total",
+      file: "src/app.ts",
+      line: 12,
+      callsTo: ["sum"],
+      calledBy: [],
+      referencedIn: [],
+    },
+    callers: [
+      { name: "render", file: "src/caller.ts", line: 4, callsTo: [], calledBy: [], referencedIn: [] },
+    ],
+    callees: [
+      { name: "sum", file: "src/callee.ts", line: 2, callsTo: [], calledBy: [], referencedIn: [] },
+    ],
+    tests: ["test/app.spec.ts"],
+  };
+
+  const NEIGHBORHOODS = new Map<string, Neighborhood | null>([
+    [FINDING.fingerprint, NEIGHBORHOOD],
+  ]);
+
+  /** The stub draft with a different filesTouched declaration. */
+  function draftWith(filesTouched: string[]): SuggestionDraft {
+    return { ...DRAFT, filesTouched };
+  }
+
+  it("rejects filesTouched outside the neighborhood", async () => {
+    const { cache, store } = stubCache();
+    const { provider, calls } = stubProvider([
+      textResponse(JSON.stringify(draftWith(["src/unrelated.ts"]))),
+    ]);
+
+    const results = await generateSuggestions(
+      [FINDING],
+      snippetFor,
+      options(provider, cache, { neighborhoods: NEIGHBORHOODS }),
+    );
+
+    expect(results).toHaveLength(0);
+    expect(store.size).toBe(0);
+    // First response rejected; the repair retry asks once, then it is skipped.
+    expect(calls).toHaveLength(2);
+  });
+
+  it("accepts filesTouched matching the finding's file", async () => {
+    const { cache, store } = stubCache();
+    const { provider } = stubProvider([textResponse(JSON.stringify(draftWith(["src/app.ts"])))]);
+
+    const results = await generateSuggestions(
+      [FINDING],
+      snippetFor,
+      options(provider, cache, { neighborhoods: NEIGHBORHOODS }),
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ filesTouched: ["src/app.ts"] });
+    expect(store.size).toBe(1);
+  });
+
+  it("accepts filesTouched matching a caller's file", async () => {
+    const { cache, store } = stubCache();
+    const { provider } = stubProvider([textResponse(JSON.stringify(draftWith(["src/caller.ts"])))]);
+
+    const results = await generateSuggestions(
+      [FINDING],
+      snippetFor,
+      options(provider, cache, { neighborhoods: NEIGHBORHOODS }),
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ filesTouched: ["src/caller.ts"] });
+    expect(store.size).toBe(1);
+  });
+
+  it("accepts any filesTouched when neighborhood is null", async () => {
+    const { cache, store } = stubCache();
+    const { provider } = stubProvider([textResponse(JSON.stringify(draftWith(["anywhere/at/all.ts"])))]);
+    const nullNeighborhoods = new Map<string, Neighborhood | null>([
+      [FINDING.fingerprint, null],
+    ]);
+
+    const results = await generateSuggestions(
+      [FINDING],
+      snippetFor,
+      options(provider, cache, { neighborhoods: nullNeighborhoods }),
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({ filesTouched: ["anywhere/at/all.ts"] });
+    expect(store.size).toBe(1);
   });
 });
 

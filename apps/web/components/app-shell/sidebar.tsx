@@ -4,9 +4,7 @@ import { usePathname } from "next/navigation";
 import { FolderGit2, LayoutDashboard, PlayCircle, Settings, Zap } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-
-// TODO(M4b-2): replace with the real session user from GET /auth/me.
-const STUB_USER = { name: "Demo User", email: "demo@example.com" };
+import { useMe } from "@/lib/queries";
 
 interface NavItem {
   label: string;
@@ -36,6 +34,10 @@ interface SidebarContentProps {
 /** Logo + nav links + user card, shared by the desktop sidebar and the mobile sheet. */
 export function SidebarContent({ collapsed = false, onNavigate }: SidebarContentProps) {
   const pathname = usePathname();
+  const { data: me } = useMe();
+  const userEmail = me?.email ?? "—";
+  const userPlan = me?.plan ?? "";
+  const userInitial = me?.email ? me.email[0]!.toUpperCase() : "U";
   const labelClass = collapsed ? "hidden" : "hidden lg:inline";
 
   return (
@@ -77,20 +79,17 @@ export function SidebarContent({ collapsed = false, onNavigate }: SidebarContent
         })}
       </nav>
 
-      {/* Stub user card; the API session user lands in M4b-2. */}
+      {/* Session user card, from GET /auth/me via useMe() (M4b-2). */}
       <div className="mt-auto flex items-center gap-3 rounded-2xl bg-surface-light p-3 dark:bg-white/5">
         <Avatar>
           <AvatarFallback className="bg-brand-primary/10 text-brand-primary">
-            {STUB_USER.name
-              .split(" ")
-              .map((part) => part[0])
-              .join("")}
+            {userInitial}
           </AvatarFallback>
         </Avatar>
         <div className={cn("min-w-0", labelClass)}>
-          <p className="truncate text-sm font-medium">{STUB_USER.name}</p>
+          <p className="truncate text-sm font-medium">{userEmail}</p>
           <p className="truncate text-xs text-text-muted-light dark:text-text-muted-dark">
-            {STUB_USER.email}
+            {userPlan}
           </p>
         </div>
       </div>

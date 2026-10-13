@@ -13,7 +13,12 @@ import { CLI_VERSION } from "./version";
 const USAGE = `sft — local build runner with optional AI fixes
 
 Usage:
-  sft run [--json] [--no-cache]   Run the build pipeline
+  sft run [--json] [--no-cache] [--fail-on-severity=<error|warning|info>]
+          [--fail-on-rule=<ruleId>]... [--fail-on-count=<n>]
+      Run the build pipeline.
+      --fail-on-severity  Exit 1 if any finding is at or above this severity.
+      --fail-on-rule      Exit 1 if this rule fires. Repeatable (OR).
+      --fail-on-count     Exit 1 if more than N findings. 0 = any finding.
   sft logs [--limit N]            Show recent local runs (default 10)
   sft init                        Write a sft-dev.config.json template
   sft suggest                     Ask Claude to fix the last failure (BYOK)

@@ -15,6 +15,9 @@ import { banner, fail, pass } from "../ui";
 interface Flags {
   json: boolean;
   noCache: boolean;
+  failOnSeverity: "error" | "warning" | "info" | null;
+  failOnRules: string[];
+  failOnCount: number | null;
 }
 
 /** Hard cap on findings printed in the human-readable summary. */
@@ -41,11 +44,49 @@ function printFindings(findings: FindingsWithFingerprint[]): void {
   }
 }
 
-function parseFlags(args: string[]): Flags {
-  return {
-    json: args.includes("--json"),
-    noCache: args.includes("--no-cache"),
+/** Flag usage printed to stderr when a --fail-on-* value is invalid. */
+const RUN_USAGE =
+  "Usage: sft run [--json] [--no-cache] [--fail-on-severity=<error|warning|info>] " +
+  "[--fail-on-rule=<ruleId>]... [--fail-on-count=<n>]\n";
+
+/**
+ * Parses the sft run flags. Returns null when a --fail-on-* value is invalid
+ * so the caller can print usage and exit 1. Unknown args stay ignored, as
+ * they were before the gating flags existed.
+ */
+function parseFlags(args: string[]): Flags | null {
+  const flags: Flags = {
+    json: false,
+    noCache: false,
+    failOnSeverity: null,
+    failOnRules: [],
+    failOnCount: null,
   };
+  for (const arg of args) {
+    if (arg === "--json") {
+      flags.json = true;
+    } else if (arg === "--no-cache") {
+      flags.noCache = true;
+    } else if (arg.startsWith("--fail-on-severity=")) {
+      const value = arg.slice("--fail-on-severity=".length);
+      if (value !== "error" && value !== "warning" && value !== "info") return null;
+      flags.failOnSeverity = value;
+    } else if (arg.startsWith("--fail-on-rule=")) {
+      flags.failOnRules.push(arg.slice("--fail-on-rule=".length));
+    } else if (arg.startsWith("--fail-on-count=")) {
+      const value = arg.slice("--fail-on-count=".length);
+      if (!/^\d+$/.test(value)) return null;
+      flags.failOnCount = Number.parseInt(value, 10);
+    }
+  }
+  return flags;
+}
+
+/** Ordering for --fail-on-severity: error(2) > warning(1) > info/unknown(0). */
+function severityRank(s: string): number {
+  if (s === "error") return 2;
+  if (s === "warning") return 1;
+  return 0;
 }
 
 /** Reads and validates `sft-report.json`. Returns null when absent/invalid. */
@@ -81,7 +122,12 @@ function toCacheRun(report: SftReportV2, exitCode: number): CacheRun {
 }
 
 export async function runCommand(args: string[]): Promise<number> {
-  const { json, noCache } = parseFlags(args);
+  const flags = parseFlags(args);
+  if (flags === null) {
+    process.stderr.write(RUN_USAGE);
+    return 1;
+  }
+  const { json, noCache, failOnSeverity, failOnRules, failOnCount } = flags;
   const cwd = process.cwd();
 
   const result = await runRunner([], { cwd });
@@ -100,11 +146,28 @@ export async function runCommand(args: string[]): Promise<number> {
     findings = null;
   }
 
+  // Gating (--fail-on-* flags): only consulted when the runner itself passed,
+  // so a real runner failure keeps its exit code. A null findings list (parse
+  // error) is treated as [] — every condition is then vacuously false.
+  let code = result.exitCode;
+  if (code === 0) {
+    const list = findings ?? [];
+    const failsOnSeverity =
+      failOnSeverity !== null &&
+      list.some((f) => severityRank(f.severity) >= severityRank(failOnSeverity));
+    const failsOnRule =
+      failOnRules.length > 0 && list.some((f) => failOnRules.includes(f.ruleId));
+    const failsOnCount = failOnCount !== null && list.length > failOnCount;
+    if (failsOnSeverity || failsOnRule || failsOnCount) {
+      code = 1;
+    }
+  }
+
   if (json) {
     process.stdout.write(
       `${JSON.stringify({ ...report, findings: findings ?? [] }, null, 2)}\n`,
     );
-    return result.exitCode;
+    return code;
   }
 
   process.stdout.write(`${banner(`run finished ${report.finishedAt}`)}\n`);
@@ -126,5 +189,5 @@ export async function runCommand(args: string[]): Promise<number> {
     appendRun(toCacheRun(report, result.exitCode));
   }
 
-  return result.exitCode;
+  return code;
 }

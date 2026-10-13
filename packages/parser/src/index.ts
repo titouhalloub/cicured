@@ -8,6 +8,8 @@ export { bucketLine, computeFingerprint, normalizeMessage } from "./fingerprint"
 export { parseTsc } from "./parsers/tsc";
 export { parseEslint, stripRepoPrefix } from "./parsers/eslint";
 export { parseJest } from "./parsers/jest";
+export { parsePytest } from "./parsers/pytest";
+export { parseRuff } from "./parsers/ruff";
 export { parseTask } from "./parsers/index";
 
 // Explicit (not `export *`) so Node's CJS named-export lexer sees these when

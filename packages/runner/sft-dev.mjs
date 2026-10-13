@@ -2,7 +2,7 @@
 // sft-dev.mjs — sandboxed build runner for SFT-Dev SaaS (v2, hardened)
 // Contract: writes sft-report.json in cwd; exit 0 = all tasks passed, 1 = >=1 task failed, 2 = runner crash.
 // Report schema stays version 2; new fields are additive: task.skipped, task.truncated, report.warnings.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -54,6 +54,44 @@ function detectTasks() {
   }
   else if (existsSync("vitest.config.ts") || existsSync("vitest.config.js") || dev.vitest) tasks.push({ name: "Tests", command: "vitest run" });
   else if (existsSync("jest.config.js") || existsSync("jest.config.ts") || dev.jest) tasks.push({ name: "Tests", command: "jest --passWithNoTests --ci" });
+  // Phase 3d-1: Python tasks are additive — mixed repos get both sets and the
+  // names never collide with the Node/TS ones.
+  for (const task of detectPythonTasks()) tasks.push(task);
+  return tasks;
+}
+
+// Python toolchain probe (Phase 3d-1): tasks are only added when python3 is
+// actually runnable, so a missing interpreter skips gracefully with a warning
+// instead of failing every Python task at spawn time.
+function hasPython3() {
+  try { return !spawnSync("python3", ["--version"], { stdio: "ignore" }).error; } catch { return false; }
+}
+
+function detectPythonTasks() {
+  let pyproject = "";
+  try { pyproject = readFileSync("pyproject.toml", "utf8"); } catch {}
+  const hasPyproject = pyproject.length > 0;
+  const hasTestsDir = existsSync("tests");
+  // One pytest signal from any of the config surfaces: a [tool.*pytest*] key
+  // in pyproject.toml, a tests/ dir next to it, pytest.ini / tox.ini, or a
+  // plain requirements.txt / setup.py repo that ships a tests/ directory.
+  const pytestSignal =
+    (hasPyproject && (/\[tool\.[^\]]*pytest/.test(pyproject) || hasTestsDir)) ||
+    existsSync("pytest.ini") ||
+    existsSync("tox.ini") ||
+    (!hasPyproject && (existsSync("requirements.txt") || existsSync("setup.py")) && hasTestsDir);
+  const ruffSignal =
+    (hasPyproject && /\[tool\.ruff/.test(pyproject)) ||
+    existsSync("ruff.toml") ||
+    existsSync(".ruff.toml");
+  if (!pytestSignal && !ruffSignal) return [];
+  if (!hasPython3()) {
+    warnings.push("python3 not found on PATH; skipping Python tasks");
+    return [];
+  }
+  const tasks = [];
+  if (pytestSignal) tasks.push({ name: "Python Tests", command: "python3 -m pytest -v --no-header --tb=short" });
+  if (ruffSignal) tasks.push({ name: "Python Lint", command: "ruff check --output-format=json ." });
   return tasks;
 }
 

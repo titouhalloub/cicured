@@ -19,6 +19,13 @@ RUN apk add --no-cache git bash ca-certificates \
     && mkdir -p /workspace /opt/sft \
     && chown -R sandbox:sandbox /workspace
 
+# Python toolchain (Phase 3d-1): python3 + pip, then pytest and ruff so the
+# runner's "Python Tests" / "Python Lint" tasks find their tools on PATH.
+# --break-system-packages: Alpine 3.19+ marks the system site-packages as
+# externally managed (PEP 668); the sandbox is disposable, so install anyway.
+RUN apk add --no-cache python3 py3-pip && \
+    pip install --no-cache-dir --break-system-packages pytest ruff
+
 COPY docker/sandbox/entrypoint.sh /opt/sft/entrypoint.sh
 RUN chmod +x /opt/sft/entrypoint.sh
 

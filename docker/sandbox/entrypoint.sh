@@ -70,6 +70,13 @@ git clone --depth 1 --branch "$GIT_BRANCH" \
 cd "$REPO_DIR"
 
 # ── 3. Lockfile-aware install (Spec §2 worker pre-flight) ───────────────────
+# Point pnpm at the store the worker bind-mounts from the host at /pnpm-store,
+# so the ~100 MB of native binaries is read from disk on every run after the
+# first instead of being re-downloaded into the tmpfs. Both names are set:
+# PNPM_STORE_DIR is pnpm-specific, the npm_config spelling is honored by pnpm
+# too - belt and suspenders across pnpm versions.
+export PNPM_STORE_DIR=/pnpm-store
+export npm_config_store_dir=/pnpm-store
 install_started_ms="$(epoch_ms)"
 if [ -f pnpm-lock.yaml ]; then
   pnpm install --frozen-lockfile

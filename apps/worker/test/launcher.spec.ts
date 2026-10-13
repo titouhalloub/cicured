@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, promises as fsPromises } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path, { join } from "node:path";
@@ -89,11 +89,15 @@ describe("createSandboxContainer (Spec §8 hardening)", () => {
 
       const options = created[0]!;
       const binds = options.HostConfig?.Binds ?? [];
-      expect(binds).toHaveLength(2);
+      expect(binds).toHaveLength(3);
       // Bind 2: the per-run host dir. The workspace is a tmpfs, so the report
       // is copied here before the container exits.
       const expected = `${path.resolve(reportsDir, RUN_ID)}:/out:rw`;
       expect(binds[1]).toBe(expected);
+      // Bind 3: the persistent pnpm store, so installs reuse the host cache.
+      expect(binds.some((bind) => /sft-dev\.mjs:.*:ro$/.test(bind))).toBe(true);
+      expect(binds.some((bind) => /out:rw$/.test(bind))).toBe(true);
+      expect(binds.some((bind) => /pnpm-store:rw$/.test(bind))).toBe(true);
 
       // The host side of that bind must exist before the container starts.
       const outDir = path.resolve(reportsDir, RUN_ID);
@@ -127,6 +131,21 @@ describe("createSandboxContainer (Spec §8 hardening)", () => {
       expect(mode).toBe(0o777);
     } finally {
       await rm(reportsDir, { recursive: true, force: true });
+    }
+  });
+
+  it("creates the pnpm store host directory before launching", async () => {
+    const { docker } = makeDockerDouble();
+    const env = envOf();
+    const mkdirSpy = vi.spyOn(fsPromises, "mkdir");
+    try {
+      await createSandboxContainer(docker, env, INPUT);
+      expect(mkdirSpy).toHaveBeenCalledWith(env.PNPM_STORE_HOST_PATH, {
+        recursive: true,
+        mode: 0o777,
+      });
+    } finally {
+      mkdirSpy.mockRestore();
     }
   });
 

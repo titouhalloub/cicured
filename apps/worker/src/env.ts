@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
@@ -48,6 +49,17 @@ export const EnvSchema = z.object({
 
   /** Host path of the pinned runner, bind-mounted read-only into the sandbox. */
   SFT_RUNNER_HOST_PATH: z.string().min(1).default(DEFAULT_RUNNER_HOST_PATH),
+
+  /**
+   * Host directory bind-mounted read-write at /pnpm-store in every sandbox
+   * (entrypoint.sh points PNPM_STORE_DIR at it), so the pnpm store persists
+   * across runs instead of being re-downloaded into the tmpfs each time.
+   * Absolute by default so it can be used directly as a bind-mount source.
+   */
+  PNPM_STORE_HOST_PATH: z
+    .string()
+    .min(1)
+    .default(path.join(os.homedir(), ".cache", "cicured-pnpm-store")),
 
   // ─── S3 / MinIO log archival (M2b-2) ─────────────────────────────────────
   // Same code path for MinIO (local) and AWS S3 (prod). MinIO requires

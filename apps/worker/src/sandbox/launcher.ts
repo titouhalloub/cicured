@@ -89,6 +89,13 @@ export async function createSandboxContainer(
   // is not enough.
   const outDir = path.resolve(env.REPORTS_DIR, runId);
   await fs.mkdir(outDir, { recursive: true, mode: 0o777 });
+
+  // The pnpm store is bind-mounted read-write at /pnpm-store (the entrypoint
+  // sets PNPM_STORE_DIR/npm_config_store_dir accordingly) so installs reuse
+  // the host cache instead of re-downloading native binaries into the tmpfs
+  // on every run. Same 0o777/umask caveat as the /out directory above: the
+  // sandbox user (uid 1001) must be able to write to it.
+  await fs.mkdir(env.PNPM_STORE_HOST_PATH, { recursive: true, mode: 0o777 });
   await fs.chmod(outDir, 0o777);
 
   const options: ContainerCreateOptions = {
@@ -121,6 +128,7 @@ export async function createSandboxContainer(
       Binds: [
         `${env.SFT_RUNNER_HOST_PATH}:${RUNNER_CONTAINER_PATH}:ro`,
         `${outDir}:/out:rw`,
+        `${env.PNPM_STORE_HOST_PATH}:/pnpm-store:rw`,
       ],
     },
   };

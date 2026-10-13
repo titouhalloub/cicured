@@ -94,8 +94,10 @@ export async function createSandboxContainer(
   // sets PNPM_STORE_DIR/npm_config_store_dir accordingly) so installs reuse
   // the host cache instead of re-downloading native binaries into the tmpfs
   // on every run. Same 0o777/umask caveat as the /out directory above: the
-  // sandbox user (uid 1001) must be able to write to it.
+  // sandbox user (uid 1001) must be able to write to it, and mkdir's `mode`
+  // is masked by the process umask, so the chmod below is required too.
   await fs.mkdir(env.PNPM_STORE_HOST_PATH, { recursive: true, mode: 0o777 });
+  await fs.chmod(env.PNPM_STORE_HOST_PATH, 0o777);
   await fs.chmod(outDir, 0o777);
 
   const options: ContainerCreateOptions = {

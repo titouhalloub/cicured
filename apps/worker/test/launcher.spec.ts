@@ -138,14 +138,17 @@ describe("createSandboxContainer (Spec §8 hardening)", () => {
     const { docker } = makeDockerDouble();
     const env = envOf();
     const mkdirSpy = vi.spyOn(fsPromises, "mkdir");
+    const chmodSpy = vi.spyOn(fsPromises, "chmod");
     try {
       await createSandboxContainer(docker, env, INPUT);
       expect(mkdirSpy).toHaveBeenCalledWith(env.PNPM_STORE_HOST_PATH, {
         recursive: true,
         mode: 0o777,
       });
+      expect(chmodSpy).toHaveBeenCalledWith(env.PNPM_STORE_HOST_PATH, 0o777);
     } finally {
       mkdirSpy.mockRestore();
+      chmodSpy.mockRestore();
     }
   });
 

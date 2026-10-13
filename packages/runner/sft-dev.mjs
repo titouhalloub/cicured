@@ -204,6 +204,11 @@ process.on("uncaughtException", crash);
 process.on("unhandledRejection", crash);
 
 async function main() {
+  if (process.argv.includes("--detect-only")) {
+    const tasks = detectTasks();
+    process.stdout.write(JSON.stringify({ tasks, warnings }, null, 2) + "\n");
+    process.exit(0);
+  }
   const tasks = loadConfig();
   console.log(`[sft-dev] platform=${os.platform()} tasks=${tasks.length} cwd=${process.cwd()} deadline=${DEADLINE_MS}ms`);
   for (const w of warnings) console.log(`[sft-dev] ⚠ ${w}`);

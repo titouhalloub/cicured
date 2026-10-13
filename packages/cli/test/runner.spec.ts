@@ -2,7 +2,16 @@ import childProcess from "node:child_process";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runRunner } from "../src/runner";
 
-const RUNNER_PATH = "E:\\cicured\\packages\\runner\\sft-dev.mjs";
+// The runner path is resolved at runtime by `resolveRunnerPath()` inside
+// `src/runner.ts`. The test asserts its *shape*, not a machine-specific
+// absolute path — a hardcoded E:\... made this pass only on the original
+// Windows dev machine and fail everywhere else (including cicured's own
+// sandbox on Linux).
+const RUNNER_PATH_SUFFIX = /sft-dev\.mjs$/;
+
+// cwd is passed through to spawn unchanged; the value does not need to
+// exist on disk because spawn is stubbed below.
+const TEST_CWD = "test-cwd-value-is-not-read";
 
 let spawnArgs: string[];
 let spawnOpts: childProcess.SpawnOptions;
@@ -32,18 +41,20 @@ beforeEach(() => {
 describe("runRunner", () => {
   it("spawns node with the resolved runner path and no extra args", async () => {
     stubSpawn(0);
-    const result = await runRunner([], { cwd: "C:\\tmp\\repo" });
+    const result = await runRunner([], { cwd: TEST_CWD });
 
-    expect(spawnArgs[0]).toBe(RUNNER_PATH);
     expect(spawnArgs).toHaveLength(1);
-    expect(spawnOpts.cwd).toBe("C:\\tmp\\repo");
+    expect(spawnArgs[0]).toMatch(RUNNER_PATH_SUFFIX);
+    expect(spawnOpts.cwd).toBe(TEST_CWD);
     expect(result.exitCode).toBe(0);
   });
 
   it("forwards extra args to the runner", async () => {
     stubSpawn(1);
-    await runRunner(["--json"], { cwd: "C:\\tmp\\repo" });
-    expect(spawnArgs).toEqual([RUNNER_PATH, "--json"]);
+    await runRunner(["--json"], { cwd: TEST_CWD });
+    expect(spawnArgs).toHaveLength(2);
+    expect(spawnArgs[0]).toMatch(RUNNER_PATH_SUFFIX);
+    expect(spawnArgs[1]).toBe("--json");
   });
 
   it("surfaces the runner exit code", async () => {

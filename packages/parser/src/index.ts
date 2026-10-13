@@ -11,6 +11,8 @@ export { parseJest } from "./parsers/jest";
 export { parsePytest } from "./parsers/pytest";
 export { parseRuff } from "./parsers/ruff";
 export { parseTask } from "./parsers/index";
+export type { Parser } from "./parsers/registry";
+export { PARSERS, TASK_NAME_TO_PARSER } from "./parsers/registry";
 
 // Explicit (not `export *`) so Node's CJS named-export lexer sees these when
 // `bin/sft.mjs` runs the CLI through tsx — `export *` names are invisible to

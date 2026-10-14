@@ -58,13 +58,14 @@ RUN pip install --no-cache-dir --break-system-packages semgrep==1.173.0
 # read the toolchain, and made world-readable for the same reason. No cargo
 # registry cache — the first sandbox run on a Rust repo downloads crates from
 # crates.io (known limitation, deferred like the pnpm store).
+ENV CARGO_HOME=/usr/local/cargo
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV PATH="/usr/local/cargo/bin:${PATH}"
+
 RUN apk add --no-cache build-base musl-dev curl && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
       | sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path && \
     rustup component add clippy
-ENV CARGO_HOME=/usr/local/cargo
-ENV RUSTUP_HOME=/usr/local/rustup
-ENV PATH="/usr/local/cargo/bin:${PATH}"
 RUN chmod -R a+rX /usr/local/cargo /usr/local/rustup
 
 COPY docker/sandbox/entrypoint.sh /opt/sft/entrypoint.sh

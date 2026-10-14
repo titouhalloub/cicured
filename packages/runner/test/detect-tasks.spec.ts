@@ -20,10 +20,11 @@ import { RUNNER_PATH } from "./helpers";
  * "tool missing" case.
  */
 
-/** Directories holding the python3 / go / semgrep stand-ins; prepended to PATH as needed. */
+/** Directories holding the python3 / go / semgrep / cargo stand-ins; prepended to PATH as needed. */
 const PY3_SHIM_DIR = mkdtempSync(path.join(tmpdir(), "sft-py3-"));
 const GO_SHIM_DIR = mkdtempSync(path.join(tmpdir(), "sft-go-"));
 const SEMGREP_SHIM_DIR = mkdtempSync(path.join(tmpdir(), "sft-semgrep-"));
+const CARGO_SHIM_DIR = mkdtempSync(path.join(tmpdir(), "sft-cargo-"));
 /** A path that never exists, so a bare spawn fails with ENOENT. */
 const MISSING_PATH_DIR = path.join(tmpdir(), "sft-tools-absent-does-not-exist");
 
@@ -31,12 +32,13 @@ const MISSING_PATH_DIR = path.join(tmpdir(), "sft-tools-absent-does-not-exist");
 const fixtures: string[] = [];
 
 beforeAll(() => {
-  // `node --version` exits 0 — enough for hasPython3()/hasGo()/hasSemgrep(),
-  // which only check that the spawn did not error.
+  // `node --version` exits 0 — enough for hasPython3()/hasGo()/hasSemgrep()/
+  // hasCargo(), which only check that the spawn did not error.
   for (const [dir, exe] of [
     [PY3_SHIM_DIR, "python3"],
     [GO_SHIM_DIR, "go"],
     [SEMGREP_SHIM_DIR, "semgrep"],
+    [CARGO_SHIM_DIR, "cargo"],
   ] as const) {
     const shim = path.join(dir, process.platform === "win32" ? `${exe}.exe` : exe);
     copyFileSync(process.execPath, shim);
@@ -48,6 +50,7 @@ afterAll(() => {
   rmSync(PY3_SHIM_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   rmSync(GO_SHIM_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   rmSync(SEMGREP_SHIM_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  rmSync(CARGO_SHIM_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
 });
 
 afterEach(() => {
@@ -75,6 +78,7 @@ function detect(
   python3: boolean = true,
   go: boolean = true,
   semgrep: boolean = true,
+  cargo: boolean = true,
 ): DetectResult {
   const cwd = mkdtempSync(path.join(tmpdir(), "sft-detect-"));
   fixtures.push(cwd);
@@ -287,6 +291,60 @@ describe("detectSemgrepTasks via --detect-only", () => {
     expect(list).toContain("Python Tests");
     expect(list).toContain("Go Tests");
     expect(list).toContain("Security");
+    expect(new Set(list).size).toBe(list.length);
+  });
+});
+
+describe("detectRustTasks via --detect-only", () => {
+  const rustTask = (result: DetectResult, name: string): DetectedTask | undefined =>
+    result.tasks.find((t) => t.name === name);
+
+  it("Cargo.toml with cargo on PATH adds Rust Lint and Rust Tests", () => {
+    const result = detect({
+      "Cargo.toml": '[package]\nname = "foo"\nversion = "0.1.0"\nedition = "2021"\n',
+    });
+    const list = names(result);
+
+    expect(list).toContain("Rust Lint");
+    expect(list).toContain("Rust Tests");
+    // Clippy's JSON diagnostics are the only reason NDJSON parsing works.
+    expect(rustTask(result, "Rust Lint")?.command).toContain("--message-format=json");
+    // --no-fail-fast keeps every target running so one failure doesn't mask the rest.
+    expect(rustTask(result, "Rust Tests")?.command).toContain("--no-fail-fast");
+  });
+
+  it("no Cargo.toml adds neither Rust task and does not probe cargo", () => {
+    const result = detect({ "package.json": '{"scripts": {"test": "vitest run"}}\n' }, [], true, true, true, false);
+
+    expect(names(result)).not.toContain("Rust Lint");
+    expect(names(result)).not.toContain("Rust Tests");
+    expect(result.warnings.some((w) => /cargo not found/.test(w))).toBe(false);
+  });
+
+  it("cargo missing yields a warning and no Rust tasks", () => {
+    const result = detect({ "Cargo.toml": '[package]\nname = "foo"\nversion = "0.1.0"\n' }, [], true, true, true, false);
+
+    expect(names(result)).not.toContain("Rust Lint");
+    expect(names(result)).not.toContain("Rust Tests");
+    expect(result.warnings.some((w) => /cargo not found on PATH/.test(w))).toBe(true);
+  });
+
+  it("mixed repo gets Tests, Python Tests, Go Tests, Security, Rust Lint, Rust Tests", () => {
+    const result = detect({
+      "package.json": '{"scripts": {"test": "vitest run"}}\n',
+      "pyproject.toml": '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n',
+      "go.mod": "module example.com/foo\n\ngo 1.23\n",
+      "foo_test.go": "package foo\n",
+      "Cargo.toml": '[package]\nname = "foo"\nversion = "0.1.0"\n',
+    });
+    const list = names(result);
+
+    expect(list).toContain("Tests");
+    expect(list).toContain("Python Tests");
+    expect(list).toContain("Go Tests");
+    expect(list).toContain("Security");
+    expect(list).toContain("Rust Lint");
+    expect(list).toContain("Rust Tests");
     expect(new Set(list).size).toBe(list.length);
   });
 });

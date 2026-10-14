@@ -1,4 +1,6 @@
 import type { ParsedFinding } from "../types";
+import { parseCargoClippy } from "./cargo-clippy";
+import { parseCargoTest } from "./cargo-test";
 import { parseEslint } from "./eslint";
 import { parseGoTest } from "./go-test";
 import { parseGoVet } from "./go-vet";
@@ -46,6 +48,8 @@ export const PARSERS: Record<string, Parser> = {
   "go-test": { id: "go-test", parse: parseGoTest },
   "go-vet": { id: "go-vet", parse: parseGoVet },
   semgrep: { id: "semgrep", parse: parseSemgrep },
+  "cargo-clippy": { id: "cargo-clippy", parse: parseCargoClippy },
+  "cargo-test": { id: "cargo-test", parse: parseCargoTest },
   // Config tier (Phase 3e): no name mapping — these are only reachable through
   // an explicit `task.parser` on a user-supplied sft-dev.config.json task.
   json: { id: "json", parse: parseJson },
@@ -65,4 +69,6 @@ export const TASK_NAME_TO_PARSER: Record<string, string> = {
   "Go Tests": "go-test",
   "Go Vet": "go-vet",
   "Security": "semgrep",
+  "Rust Lint": "cargo-clippy",
+  "Rust Tests": "cargo-test",
 };

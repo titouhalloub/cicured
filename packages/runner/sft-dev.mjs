@@ -59,6 +59,7 @@ function detectTasks() {
   for (const task of detectPythonTasks()) tasks.push(task);
   for (const task of detectGoTasks()) tasks.push(task);
   for (const task of detectSemgrepTasks()) tasks.push(task);
+  for (const task of detectRustTasks()) tasks.push(task);
   return tasks;
 }
 
@@ -138,6 +139,28 @@ function hasSemgrep() {
 function detectSemgrepTasks() {
   if (!hasSemgrep()) return [];
   return [{ name: "Security", command: "semgrep scan --json --config auto --quiet --metrics=off ." }];
+}
+
+// Cargo probe (Phase 3d-4): mirrors hasGo() — a module without a runnable
+// `cargo` skips gracefully with a warning instead of failing every Rust task
+// at spawn time.
+function hasCargo() {
+  try { return !spawnSync("cargo", ["--version"], { stdio: "ignore" }).error; } catch { return false; }
+}
+
+function detectRustTasks() {
+  if (!existsSync("Cargo.toml")) return [];
+  if (!hasCargo()) {
+    warnings.push("cargo not found on PATH; skipping Rust tasks");
+    return [];
+  }
+  // --quiet keeps clippy's stdout to NDJSON only (no "Compiling..." progress
+  // lines to pollute the stream); --no-fail-fast runs every test target even
+  // when one fails, which is what a diagnostics tool wants.
+  return [
+    { name: "Rust Lint", command: "cargo clippy --message-format=json --quiet" },
+    { name: "Rust Tests", command: "cargo test --no-fail-fast" },
+  ];
 }
 
 /** Parser dispatch fields carried by user-supplied config tasks (Phase 3e). */

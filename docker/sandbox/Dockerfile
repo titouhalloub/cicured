@@ -48,6 +48,25 @@ ENV CGO_ENABLED=0
 # future phase may mount a rule cache, same pattern as the pnpm store.
 RUN pip install --no-cache-dir --break-system-packages semgrep==1.173.0
 
+# Rust toolchain (Phase 3d-4): rustup installer, not apk. Alpine's apk rust
+# package lags upstream and pulls a phantom gcc dependency. build-base +
+# musl-dev are the only apk prerequisites needed for linking. rustup-init
+# installs the current stable toolchain (~70 MB) non-interactively with the
+# minimal profile (no rust-docs/rustfmt). Clippy is added explicitly after.
+# --no-modify-path keeps rustup out of .profile; PATH is set via ENV below.
+# CARGO_HOME/RUSTUP_HOME are moved off /root so the sandbox user (uid 1001) can
+# read the toolchain, and made world-readable for the same reason. No cargo
+# registry cache — the first sandbox run on a Rust repo downloads crates from
+# crates.io (known limitation, deferred like the pnpm store).
+RUN apk add --no-cache build-base musl-dev curl && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path && \
+    rustup component add clippy
+ENV CARGO_HOME=/usr/local/cargo
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV PATH="/usr/local/cargo/bin:${PATH}"
+RUN chmod -R a+rX /usr/local/cargo /usr/local/rustup
+
 COPY docker/sandbox/entrypoint.sh /opt/sft/entrypoint.sh
 RUN chmod +x /opt/sft/entrypoint.sh
 

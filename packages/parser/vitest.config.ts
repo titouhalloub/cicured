@@ -16,5 +16,10 @@ export default defineConfig({
       "**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*",
       "test/fixtures/**",
     ],
+    // buildCodeGraph shells out to the TypeScript compiler API and walks a
+    // real fixture tree; under `pnpm -r`'s 7-package concurrency on Windows it
+    // can exceed vitest's 5s default. Mirrors the runner's budget.
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
 });

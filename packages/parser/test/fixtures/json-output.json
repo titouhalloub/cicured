@@ -1,0 +1,21 @@
+{
+  "tool": "customcheck",
+  "version": "2.4.1",
+  "results": [
+    {
+      "file": "/workspace/repo/src/db.ts",
+      "loc": { "line": 42, "col": 5 },
+      "message": "unsanitized SQL query",
+      "level": "ERROR",
+      "rule": "SQL-INJECTION"
+    },
+    {
+      "file": "/workspace/repo/src/api.py",
+      "loc": { "line": 10, "col": 1 },
+      "message": "subprocess call with shell=True",
+      "level": "NOTICE",
+      "rule": "SHELL-INJECTION"
+    }
+  ],
+  "errors": []
+}

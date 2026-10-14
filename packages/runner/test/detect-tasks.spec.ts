@@ -58,6 +58,8 @@ afterEach(() => {
 interface DetectedTask {
   name: string;
   command: string;
+  parser?: string;
+  parserConfig?: unknown;
 }
 
 interface DetectResult {
@@ -286,5 +288,56 @@ describe("detectSemgrepTasks via --detect-only", () => {
     expect(list).toContain("Go Tests");
     expect(list).toContain("Security");
     expect(new Set(list).size).toBe(list.length);
+  });
+});
+
+describe("user-supplied config tasks via --detect-only", () => {
+  it("a task with a parser field is preserved with its parserConfig", () => {
+    const result = detect({
+      "sft-dev.config.json":
+        `${JSON.stringify(
+          {
+            tasks: [
+              {
+                name: "Custom Scan",
+                command: "my-tool --json",
+                parser: "json",
+                parserConfig: { path: "results", fields: { file: "file", line: "line" } },
+              },
+            ],
+          },
+          null,
+          2,
+        )}\n`,
+    });
+
+    const task = result.tasks.find((t) => t.name === "Custom Scan");
+    expect(task).toBeDefined();
+    expect(task?.command).toBe("my-tool --json");
+    expect(task?.parser).toBe("json");
+    expect(task?.parserConfig).toEqual({ path: "results", fields: { file: "file", line: "line" } });
+  });
+
+  it("a config task without a parser field carries no parser keys", () => {
+    const result = detect({
+      "sft-dev.config.json":
+        `${JSON.stringify({ tasks: [{ name: "Plain", command: "echo hi" }] }, null, 2)}\n`,
+    });
+
+    const task = result.tasks.find((t) => t.name === "Plain");
+    expect(task).toBeDefined();
+    expect(task?.parser).toBeUndefined();
+    expect(task?.parserConfig).toBeUndefined();
+  });
+
+  it("an empty-string parser id is dropped instead of failing the report", () => {
+    const result = detect({
+      "sft-dev.config.json":
+        `${JSON.stringify({ tasks: [{ name: "Bad", command: "echo hi", parser: "" }] }, null, 2)}\n`,
+    });
+
+    const task = result.tasks.find((t) => t.name === "Bad");
+    expect(task).toBeDefined();
+    expect(task?.parser).toBeUndefined();
   });
 });

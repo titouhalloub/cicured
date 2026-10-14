@@ -3,6 +3,7 @@ import { parseEslint } from "./eslint";
 import { parseGoTest } from "./go-test";
 import { parseGoVet } from "./go-vet";
 import { parseJest } from "./jest";
+import { parseJson } from "./json";
 import { parsePytest } from "./pytest";
 import { parseRuff } from "./ruff";
 import { parseSemgrep } from "./semgrep";
@@ -18,7 +19,12 @@ import { parseTsc } from "./tsc";
  */
 export interface Parser {
   id: string;
-  parse(stdout: string, stderr: string, command: string): ParsedFinding[];
+  parse(
+    stdout: string,
+    stderr: string,
+    command: string,
+    config?: unknown,
+  ): ParsedFinding[];
 }
 
 /**
@@ -40,6 +46,9 @@ export const PARSERS: Record<string, Parser> = {
   "go-test": { id: "go-test", parse: parseGoTest },
   "go-vet": { id: "go-vet", parse: parseGoVet },
   semgrep: { id: "semgrep", parse: parseSemgrep },
+  // Config tier (Phase 3e): no name mapping — these are only reachable through
+  // an explicit `task.parser` on a user-supplied sft-dev.config.json task.
+  json: { id: "json", parse: parseJson },
 };
 
 /**

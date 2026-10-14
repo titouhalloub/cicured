@@ -70,4 +70,38 @@ describe("parser registry", () => {
     // decides on next-build parsing; the lookup miss maps to [].
     expect(TASK_NAME_TO_PARSER["Build"]).toBeUndefined();
   });
+
+  it("task.parser wins over the task-name map", () => {
+    // Same stdout, two ids: the explicit parser (Phase 3e) decides, the name
+    // mapping is only the fallback.
+    const explicit = parseTask(
+      task({
+        name: "Custom Scan",
+        command: "my-tool --json",
+        stdout: fixture("json-output.json"),
+        parser: "json",
+        parserConfig: {
+          path: "results",
+          fields: { file: "file", line: "loc.line", col: "loc.col", message: "message", severity: "level", ruleId: "rule" },
+          severityMap: { ERROR: "error", NOTICE: "info" },
+        },
+      }),
+    );
+    const byName = parseTask(task({ stdout: fixture("json-output.json") }));
+
+    expect(byName).toEqual([]);
+    expect(explicit).toHaveLength(2);
+    expect(explicit[0]!.ruleId).toBe("SQL-INJECTION");
+  });
+
+  it("an explicit parser id that is not registered yields []", () => {
+    expect(
+      parseTask(task({ name: "Custom", command: "x", stdout: "[]", parser: "no-such-parser" })),
+    ).toEqual([]);
+  });
+
+  it("config-tier parsers are registered but not name-mapped", () => {
+    expect(PARSERS["json"]).toBeDefined();
+    expect(TASK_NAME_TO_PARSER["json"]).toBeUndefined();
+  });
 });

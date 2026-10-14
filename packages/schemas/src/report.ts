@@ -31,6 +31,14 @@ export const SftTaskV2 = z.object({
   durationMs: z.number().int().nonnegative(),
   stdout: z.string().max(PARSER_LIMITS.maxTaskStreamChars),
   stderr: z.string().max(PARSER_LIMITS.maxTaskStreamChars),
+  /**
+   * Registry parser id (e.g. "json", "regex", "tsc"). When present, parseTask
+   * dispatches by this instead of by task name. Config-tier parsers (Phase 3e)
+   * set it from user-supplied sft-dev.config.json tasks.
+   */
+  parser: z.string().min(1).optional(),
+  /** Free-form parser config, validated by the parser itself at parse time. */
+  parserConfig: z.unknown().optional(),
 });
 
 export const SftSummaryV2 = z.object({

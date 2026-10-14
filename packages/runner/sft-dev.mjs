@@ -140,6 +140,10 @@ function detectSemgrepTasks() {
   return [{ name: "Security", command: "semgrep scan --json --config auto --quiet --metrics=off ." }];
 }
 
+/** Parser dispatch fields carried by user-supplied config tasks (Phase 3e). */
+const parserFieldsOf = (task) =>
+  task.parser ? { parser: task.parser, parserConfig: task.parserConfig } : {};
+
 function loadConfig() {
   const cfgPath = "sft-dev.config.json";
   if (existsSync(cfgPath)) {
@@ -148,6 +152,13 @@ function loadConfig() {
       if (Array.isArray(cfg.tasks) && cfg.tasks.length) {
         const valid = cfg.tasks.filter(t => t && typeof t.name === "string" && typeof t.command === "string" && t.command.trim());
         if (valid.length !== cfg.tasks.length) warnings.push(`sft-dev.config.json: ${cfg.tasks.length - valid.length} invalid task(s) ignored`);
+        // Phase 3e: a config task may pin a registry parser id + free-form
+        // config. Drop them unless the id is a non-empty string, otherwise the
+        // report would fail SftTaskV2 (parser: z.string().min(1)).
+        for (const task of valid) {
+          if (task.parser !== undefined && (typeof task.parser !== "string" || !task.parser)) delete task.parser;
+          if (task.parser === undefined) delete task.parserConfig;
+        }
         if (valid.length) return valid;
         warnings.push("sft-dev.config.json: no valid tasks, falling back to auto-detection");
       }
@@ -196,7 +207,7 @@ function runTask(task, timeoutMs) {
       const durationMs = Date.now() - startedAt;
       const exitCode = timedOut ? 124 : (typeof code === "number" ? code : (spawnError ? 127 : 1));
       const result = {
-        name: task.name, command: task.command,
+        name: task.name, command: task.command, ...parserFieldsOf(task),
         success: !timedOut && !spawnError && code === 0,
         exitCode, timedOut, skipped: false, truncated, durationMs,
         stdout: out.slice(-TAIL_CHARS), stderr: (spawnError ? `${spawnError.message}\n` : "") + err.slice(-TAIL_CHARS)
@@ -211,7 +222,8 @@ function runTask(task, timeoutMs) {
 }
 
 const skippedResult = (task, reason) => ({
-  name: task.name, command: task.command, success: false, exitCode: null, timedOut: false,
+  name: task.name, command: task.command, ...parserFieldsOf(task),
+  success: false, exitCode: null, timedOut: false,
   skipped: true, truncated: false, durationMs: 0, stdout: "", stderr: reason
 });
 
@@ -250,7 +262,10 @@ process.on("unhandledRejection", crash);
 
 async function main() {
   if (process.argv.includes("--detect-only")) {
-    const tasks = detectTasks();
+    // loadConfig(), not detectTasks(): the flag's contract is "what would this
+    // run", so user-supplied sft-dev.config.json tasks (and their parser
+    // fields, Phase 3e) must appear alongside the auto-detected ones.
+    const tasks = loadConfig();
     process.stdout.write(JSON.stringify({ tasks, warnings }, null, 2) + "\n");
     process.exit(0);
   }

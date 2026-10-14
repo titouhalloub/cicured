@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PARSER_LIMITS, parseSftReport, SftReportV2 } from "../src/index";
+import { PARSER_LIMITS, parseSftReport, SftReportV2, SftTaskV2 } from "../src/index";
 
 type Json = Record<string, unknown>;
 
@@ -83,6 +83,26 @@ describe("SftReportV2", () => {
     const oversized = "x".repeat(PARSER_LIMITS.maxTaskStreamChars + 1);
     const result = SftReportV2.safeParse(report({ tasks: [task({ stdout: oversized })] }));
     expect(result.success).toBe(false);
+  });
+});
+
+describe("SftTaskV2 parser fields (Phase 3e)", () => {
+  it("accepts a task without parser fields", () => {
+    expect(SftTaskV2.safeParse(task()).success).toBe(true);
+  });
+
+  it("accepts a task with parser and parserConfig", () => {
+    const result = SftTaskV2.safeParse(task({ parser: "json", parserConfig: { path: "results" } }));
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.parser).toBe("json");
+      expect(result.data.parserConfig).toEqual({ path: "results" });
+    }
+  });
+
+  it("rejects an empty-string parser id", () => {
+    expect(SftTaskV2.safeParse(task({ parser: "" })).success).toBe(false);
   });
 });
 

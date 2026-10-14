@@ -26,16 +26,18 @@ RUN apk add --no-cache git bash ca-certificates \
 RUN apk add --no-cache python3 py3-pip && \
     pip install --no-cache-dir --break-system-packages pytest ruff
 
-# Go toolchain (Phase 3d-3): the Go binary only. No module cache is warmed
-# here — the first sandbox run on a Go repo downloads modules from the network
-# (known limitation, deferred to a future phase; same pattern as pnpm store).
-RUN apk add --no-cache go
-
-# Go toolchain (Phase 3d-3): `go` on PATH for the runner's "Go Vet" /
-# "Go Tests" tasks. No warm module cache — the first sandbox run on a Go repo
-# downloads modules from the network (known limitation, deferred like the
-# pnpm store cache).
-RUN apk add --no-cache go
+# Go toolchain (Phase 3d-3): official tarball, not apk. Alpine's apk go package
+# pulls gcc as a phantom cgo dependency (~250 MB compressed for a 70 MB runtime)
+# and stalled the image build twice, ~3 hours each time on the gcc download.
+# The tarball is ~70 MB, single download, no gcc. CGO_ENABLED=0 makes the
+# pure-Go assumption explicit. No warm module cache — the first sandbox run on
+# a Go repo downloads modules from the network (known limitation, deferred like
+# the pnpm store cache).
+RUN wget -q https://go.dev/dl/go1.23.3.linux-amd64.tar.gz -O /tmp/go.tgz && \
+    tar -C /usr/local -xzf /tmp/go.tgz && \
+    rm /tmp/go.tgz
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV CGO_ENABLED=0
 
 # Semgrep (Phase 3a): multi-language SAST. Installed via pip because Alpine's
 # apk repos don't carry a current semgrep package. The version is pinned —

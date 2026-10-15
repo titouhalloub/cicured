@@ -35,6 +35,17 @@ export {
   writeCachedGraph,
 } from "./codegraph";
 export type { BuildOptions, Neighborhood } from "./codegraph";
+export {
+  initWalkers,
+  WALKERS,
+  WALKER_SOURCE_EXTENSIONS,
+  walkerForFile,
+} from "./graph/walker";
+export type { LanguageWalker, RawFileGraph } from "./graph/walker";
+export { tsWalker } from "./graph/ts-walker";
+export { pythonWalker } from "./graph/python-walker";
+export { goWalker } from "./graph/go-walker";
+export { rustWalker } from "./graph/rust-walker";
 
 /**
  * Deterministic findings parser (Spec §4 step 8: deterministic first, no

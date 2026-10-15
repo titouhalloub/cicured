@@ -17,6 +17,11 @@ import {
   type CodeGraphWarning,
 } from "@sft/schemas";
 import * as ts from "typescript";
+import {
+  initWalkers,
+  walkerForFile,
+  type RawFileGraph,
+} from "./graph/walker";
 
 const execFileAsync = promisify(execFile);
 
@@ -28,10 +33,20 @@ export interface BuildOptions {
 }
 
 export const DEFAULT_TEST_PATTERNS: readonly string[] = [
+  // TypeScript / JavaScript
   "**/*.test.ts",
   "**/*.test.tsx",
   "**/*.spec.ts",
   "**/*.spec.tsx",
+  "**/*.test.js",
+  "**/*.spec.js",
+  // Python (pytest conventions)
+  "**/test_*.py",
+  "**/*_test.py",
+  // Go
+  "**/*_test.go",
+  // Rust (integration tests live under tests/)
+  "**/tests/**/*.rs",
 ];
 
 export const DEFAULT_EXCLUDE_PATTERNS: readonly string[] = [
@@ -107,7 +122,7 @@ function discoverFiles(rootDir: string, exclude: readonly string[]): string[] {
     let entries: Dirent[];
     try {
       entries = readdirSync(dir, { withFileTypes: true }) as Dirent[];
-    } catch {
+    } catch (err) {
       return;
     }
     for (const entry of entries) {
@@ -121,6 +136,35 @@ function discoverFiles(rootDir: string, exclude: readonly string[]): string[] {
       if (!entry.isFile()) continue;
       if (!/\.tsx?$/.test(entry.name)) continue;
       if (/\.d\.ts$/.test(entry.name)) continue;
+      if (matchesAny(rel, exclude)) continue;
+      found.push(abs);
+    }
+  };
+  walk(rootDir);
+  return found.sort();
+}
+
+/** Like discoverFiles, but for the tree-sitter walker extensions (py/go/rs). */
+function discoverWalkerFiles(rootDir: string, exclude: readonly string[]): string[] {
+  const extRe = /\.(?:pyi?|go|rs)$/;
+  const found: string[] = [];
+  const walk = (dir: string): void => {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true }) as Dirent[];
+    } catch (err) {
+      return;
+    }
+    for (const entry of entries) {
+      const abs = path.join(dir, entry.name);
+      const rel = toPosix(path.relative(rootDir, abs));
+      if (entry.isDirectory()) {
+        if (matchesAny(`${rel}/`, exclude)) continue;
+        walk(abs);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (!extRe.test(entry.name)) continue;
       if (matchesAny(rel, exclude)) continue;
       found.push(abs);
     }
@@ -181,33 +225,127 @@ function createProgram(
 }
 
 /**
+ * Source extensions a file can be resolved to, in priority order (TS first so
+ * existing TypeScript resolution behavior is byte-for-byte preserved).
+ */
+const SOURCE_EXTS: readonly string[] = [
+  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".pyi", ".go", ".rs",
+];
+
+/** Directory index names (TS/JS `index`, Python `__init__`). */
+const INDEX_NAMES: readonly string[] = ["index", "__init__"];
+
+/** Tries `<base><ext>`, `<base>/<index><ext>`, then a directory match. */
+function matchCandidates(
+  base: string,
+  knownByRel: ReadonlySet<string>,
+): string | null {
+  const normalized = path.posix.normalize(base);
+  for (const ext of SOURCE_EXTS) {
+    const direct = `${normalized}${ext}`;
+    if (knownByRel.has(direct)) return direct;
+  }
+  for (const indexName of INDEX_NAMES) {
+    for (const ext of SOURCE_EXTS) {
+      const idx = `${normalized}/${indexName}${ext}`;
+      if (knownByRel.has(idx)) return idx;
+    }
+  }
+  // Directory import (e.g. a Go package `b` → `b/b.go`): match any file inside,
+  // preferring the lexicographically-first so output is deterministic.
+  let dirMatch: string | null = null;
+  for (const known of knownByRel) {
+    if (path.posix.dirname(known) === normalized && known !== normalized) {
+      if (dirMatch === null || known < dirMatch) dirMatch = known;
+    }
+  }
+  return dirMatch;
+}
+
+/**
  * Resolves a relative specifier to an absolute file path that is actually in
  * the graph, working purely against the discovered file set — never the
  * filesystem. That keeps excluded specifiers from becoming phantom nodes and
  * makes the output byte-identical on Windows and Linux.
  *
- * Bare specifiers (`react`, `@sft/schemas`) return null and are treated as out
- * of scope by the caller: node_modules is not part of the repo graph.
+ * Handles five specifier shapes:
+ *   - `crate://path`   Rust crate-root-relative (tries `src/` then root).
+ *   - `./x` / `../x`   JS/TS, Python relative, Rust `mod`/`super`/`self`.
+ *   - `module/x`       Go, after stripping the `module` line from go.mod.
+ *   - `pkg.mod`        Absolute Python dotted import → repo-relative pkg/mod.
+ *   - `mycrate::x`      Rust, when `mycrate` matches Cargo.toml's package name
+ *                      (integration tests in tests/ use the crate name).
+ * Anything else (bare npm/stdlib imports) returns null and is treated as out
+ * of scope by the caller.
  */
 function resolveModule(
   fromAbs: string,
   spec: string,
   rootDir: string,
   knownByRel: ReadonlySet<string>,
+  goModule?: string | null,
+  cargoCrate?: string | null,
 ): string | null {
-  if (!spec.startsWith("./") && !spec.startsWith("../")) return null;
-  const fromRel = toPosix(path.relative(rootDir, fromAbs));
-  const base = path.posix.join(path.posix.dirname(fromRel), spec);
-  const normalized = path.posix.normalize(base);
-  for (const candidate of [
-    `${normalized}.ts`,
-    `${normalized}.tsx`,
-    `${normalized}/index.ts`,
-    `${normalized}/index.tsx`,
-  ]) {
-    if (knownByRel.has(candidate)) return candidate;
+  // Rust crate-root-relative.
+  if (spec.startsWith("crate://")) {
+    const sub = spec.slice("crate://".length);
+    for (const root of ["src", ""]) {
+      const base = root === "" ? sub : `${root}/${sub}`;
+      const found = matchCandidates(base, knownByRel);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+  // Rust crate-name-qualified (integration tests: `mycrate::module::sym`).
+  if (
+    cargoCrate !== undefined && cargoCrate !== null &&
+    (spec === cargoCrate || spec.startsWith(`${cargoCrate}::`))
+  ) {
+    const rest =
+      spec === cargoCrate ? "" : spec.slice(cargoCrate.length + 2).split("::")[0];
+    if (rest === "") return null;
+    // Crate modules live at the root or under src/ (Cargo's default).
+    return matchCandidates(rest, knownByRel) ??
+      matchCandidates(`src/${rest}`, knownByRel);
+  }
+  // Relative specifier (./ or ../).
+  if (spec.startsWith("./") || spec.startsWith("../")) {
+    const fromRel = toPosix(path.relative(rootDir, fromAbs));
+    const base = path.posix.join(path.posix.dirname(fromRel), spec);
+    return matchCandidates(base, knownByRel);
+  }
+  // Go module import: strip the `module <path>` prefix from go.mod.
+  if (goModule !== undefined && goModule !== null &&
+      (spec === goModule || spec.startsWith(`${goModule}/`))) {
+    const rest = spec === goModule ? "" : spec.slice(goModule.length + 1);
+    return matchCandidates(rest === "" ? "." : rest, knownByRel);
+  }
+  // Absolute Python dotted import (`pkg.mod`) → repo-relative `pkg/mod`.
+  // Dots only (no slashes), so Go module paths can't reach this branch.
+  if (/^[A-Za-z_]\w*(\.\w+)*$/.test(spec)) {
+    return matchCandidates(spec.split(".").join("/"), knownByRel);
   }
   return null;
+}
+
+/** Reads the `module` line from go.mod, if present. */
+function readGoModule(rootDir: string): string | null {
+  const p = path.join(rootDir, "go.mod");
+  if (!existsSync(p)) return null;
+  const m = /^module\s+(\S+)/m.exec(readFileSync(p, "utf8"));
+  return m ? m[1] : null;
+}
+
+/** Reads the `name` from Cargo.toml's `[package]` section, if present. */
+function readCargoCrate(rootDir: string): string | null {
+  const p = path.join(rootDir, "Cargo.toml");
+  if (!existsSync(p)) return null;
+  const text = readFileSync(p, "utf8");
+  const pkgIdx = text.indexOf("[package]");
+  if (pkgIdx === -1) return null;
+  const section = text.slice(pkgIdx, text.indexOf("\n[", pkgIdx + 1) === -1 ? undefined : text.indexOf("\n[", pkgIdx + 1));
+  const m = /^name\s*=\s*"([^"]+)"/m.exec(section);
+  return m ? m[1] : null;
 }
 
 function collectCalls(node: ts.Node, out: Set<string>): void {
@@ -230,6 +368,11 @@ interface RawFile {
   functions: CodeGraphFunction[];
   /** Every identifier bound by an import or named as a callee in this file. */
   referenced: string[];
+  /**
+   * Raw module specifiers produced by a tree-sitter walker (Python/Go/Rust).
+   * Present only for walker files; resolved in the same pass as TS imports.
+   */
+  walkerSpecs?: string[];
 }
 
 function extractImports(
@@ -375,7 +518,7 @@ async function readGitSha(rootDir: string): Promise<string | null> {
     });
     const sha = stdout.trim();
     return sha.length > 0 ? sha : null;
-  } catch {
+  } catch (err) {
     return null;
   }
 }
@@ -437,6 +580,42 @@ export async function buildCodeGraph(opts: BuildOptions): Promise<CodeGraph> {
       });
     }
 
+    // Non-TS sources (Python / Go / Rust) via the tree-sitter walkers. The
+    // walkers never throw; a failed grammar load simply yields empty graphs
+    // for those files rather than failing the whole build. `raw` keeps
+    // TypeScript entries first so existing TS-only behavior is unchanged.
+    try {
+      await initWalkers();
+      for (const abs of discoverWalkerFiles(rootDir, exclude)) {
+        const rel = toPosix(path.relative(rootDir, abs));
+
+        const walker = walkerForFile(rel);
+        if (walker === null) continue;
+        const graph: RawFileGraph = walker.walk(readFileSync(abs, "utf8"), rel);
+        raw.push({
+          rel,
+          abs,
+          isTest: matchesAny(rel, testPatterns),
+          imports: [],
+          importEdges: [],
+          functions: graph.functions.map((fn) => ({
+            name: fn.name,
+            file: rel,
+            line: fn.line,
+            callsTo: [...fn.callsTo].sort(),
+            calledBy: [],
+            referencedIn: [],
+          })),
+          // Best-effort: every callee named in this file. Used by the
+          // referencedIn pass, mirroring referencedNames() for TS.
+          referenced: graph.functions.flatMap((fn) => fn.callsTo),
+          walkerSpecs: graph.imports,
+        });
+      }
+    } catch (err) {
+      // Grammar/WASM unavailable (e.g. exotic runtime): TS graph still valid.
+    }
+
     if (raw.length > maxFiles) {
       return emptyGraph(
         rootDir,
@@ -458,12 +637,43 @@ export async function buildCodeGraph(opts: BuildOptions): Promise<CodeGraph> {
     // Resolve imports only against files that are actually in the graph, so an
     // excluded or unresolvable spec never becomes a phantom node.
     const knownByRel = new Set(raw.map((f) => f.rel));
+    const goModule = readGoModule(rootDir);
+    const cargoCrate = readCargoCrate(rootDir);
     const importWarnings: CodeGraphWarning[] = [];
     for (const file of raw) {
+      const resolve = (spec: string): string | null =>
+        resolveModule(file.abs, spec, rootDir, knownByRel, goModule, cargoCrate);
+
+      // Walker files (Python/Go/Rust): their raw specifiers need resolving.
+      if (file.walkerSpecs !== undefined) {
+        const display: string[] = [];
+        const edges: string[] = [];
+        for (const spec of file.walkerSpecs) {
+          const resolved = resolve(spec);
+          if (resolved !== null) {
+            display.push(resolved);
+            edges.push(resolved);
+          } else if (
+            spec.startsWith("./") ||
+            spec.startsWith("../") ||
+            spec.startsWith("crate://")
+          ) {
+            // Relative/crate specifiers that don't match a known file are real
+            // unresolved imports. Bare specifiers (npm/stdlib) are out of scope
+            // and are skipped silently, mirroring the TS path.
+            importWarnings.push({
+              path: file.rel,
+              reason: `unresolved import: ${spec}`,
+            });
+          }
+        }
+        file.imports = display;
+        file.importEdges = edges;
+        continue;
+      }
+
       const sf = program.getSourceFile(file.abs);
       if (sf === undefined) continue;
-      const resolve = (spec: string): string | null =>
-        resolveModule(file.abs, spec, rootDir, knownByRel);
       const { display, edges, unresolved } = extractImports(sf, resolve);
       file.imports = display;
       file.importEdges = edges;
@@ -637,7 +847,7 @@ export async function readCachedGraph(
     const ageHours = (Date.now() - new Date(parsed.builtAt).getTime()) / 3_600_000;
     if (!Number.isFinite(ageHours) || ageHours > cacheHours()) return null;
     return parsed;
-  } catch {
+  } catch (err) {
     return null;
   }
 }
@@ -654,7 +864,7 @@ export async function writeCachedGraph(
       `${JSON.stringify(graph, null, 2)}\n`,
       "utf8",
     );
-  } catch {
+  } catch (err) {
     // A read-only or missing workspace must not fail the build.
   }
 }

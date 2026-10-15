@@ -3,18 +3,31 @@
   "version": "0.1.0",
   "private": true,
   "description": "Deterministic findings parser (M1 scaffold; tsc/eslint/jest parsers land in M3)",
+  "bundle": {
+    "files": ["dist"],
+    "dependencies": {
+      "web-tree-sitter": "^0.27.1"
+    }
+  },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
+    "build:graph": "esbuild bin/build-graph.ts --bundle --format=cjs --outfile=bin/build-graph.js --platform=node --target=node20 --external:web-tree-sitter && node scripts/build-graph.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run"
   },
   "dependencies": {
-    "@sft/schemas": "workspace:*"
+    "@sft/schemas": "workspace:*",
+    "tree-sitter-go": "^0.25.0",
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-rust": "^0.24.0",
+    "tree-sitter-typescript": "^0.23.2",
+    "web-tree-sitter": "^0.27.1"
   },
   "devDependencies": {
     "@types/node": "^24.19.0",
+    "esbuild": "^0.28.2",
     "eslint": "^10.11.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.1",

@@ -12,6 +12,11 @@ allowBuilds:
   cpu-features: false
   protobufjs: false
   ssh2: false
+  tree-sitter-go: false
+  tree-sitter-javascript: false
+  tree-sitter-python: false
+  tree-sitter-rust: false
+  tree-sitter-typescript: false
 minimumReleaseAgeExclude:
   - '@nestjs/common@12.1.1'
   - '@nestjs/core@12.1.1'

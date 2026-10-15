@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["test/**/*.spec.ts"],
+    pool: "threads",
     // When test.exclude is set it REPLACES vitest's defaults, so the full
     // standard list is spelled out here plus our fixture-repo addition.
     // test/fixtures/** are tiny throwaway repos with their own tsconfigs;

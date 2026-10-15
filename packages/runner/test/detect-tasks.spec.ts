@@ -96,14 +96,15 @@ function detect(
   if (python3) prefixes.push(PY3_SHIM_DIR);
   if (go) prefixes.push(GO_SHIM_DIR);
   if (semgrep) prefixes.push(SEMGREP_SHIM_DIR);
+  if (cargo) prefixes.push(CARGO_SHIM_DIR);
   // A tool marked absent must not be reachable at all, so the host PATH is
   // dropped whenever any tool is missing — otherwise the host's real
-  // `python3`/`go`/`semgrep` (or, on Windows, the hanging Store alias stub)
-  // leaks in.
+  // `python3`/`go`/`semgrep`/`cargo` (or, on Windows, the hanging Store alias
+  // stub) leaks in.
   const pathValue =
     prefixes.length === 0
       ? MISSING_PATH_DIR
-      : python3 && go && semgrep
+      : python3 && go && semgrep && cargo
         ? [...prefixes, hostPath].join(path.delimiter)
         : prefixes.join(path.delimiter);
   const env: NodeJS.ProcessEnv = {};

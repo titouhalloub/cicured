@@ -31,3 +31,7 @@ nohup.out
 
 # cicured local cache
 .sft/
+
+# generated parser artifacts (`pnpm build:graph` bundle + its --out-file fixture)
+packages/parser/bin/build-graph.js
+packages/parser/test/fixtures/graph-fixture/graph-out.json

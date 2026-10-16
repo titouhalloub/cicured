@@ -45,9 +45,9 @@ ENV CGO_ENABLED=0
 # (PEP 668), same as the Python toolchain install. --config auto fetches rules
 # on first run and caches them in the container tmpfs (destroyed on exit); a
 # future phase may mount a rule cache, same pattern as the pnpm store.
-COPY docker/sandbox/vendor/semgrep-1.173.0.whl /tmp/semgrep.whl
-RUN pip install --no-cache-dir --break-system-packages /tmp/semgrep.whl && \
-    rm /tmp/semgrep.whl
+COPY docker/sandbox/vendor/semgrep-1.173.0-cp310.cp311.cp312.cp313.cp314.py310.py311.py312.py313.py314-none-musllinux_1_2_x86_64.whl /tmp/
+RUN pip install --no-cache-dir --break-system-packages /tmp/semgrep-1.173.0-*.whl && \
+    rm /tmp/semgrep-1.173.0-*.whl
 
 # Bake a pinned Semgrep rule set as plain yaml. Fetching the bundle
 # directly from the registry avoids depending on semgrep's internal

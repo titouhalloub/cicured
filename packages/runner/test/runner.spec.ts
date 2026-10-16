@@ -8,7 +8,7 @@ import { RUNNER_PATH, runRunner, type RunOutcome, type RunnerReport } from "./he
  * replace sft-dev.mjs byte-for-byte and update this constant plus any
  * behaviour tests - see packages/runner/README.md.
  */
-const PINNED_SHA256 = "6f952ab8156cd8218e036255595a26b3af546beaf953807730c4e64259e0c191";
+const PINNED_SHA256 = "d9a8f1ea42751ec6ae0ac9755646f71f2fa0445aa41dab680e826567fc70fb4e";
 
 const OK_SCRIPT = "process.exit(0);\n";
 const FAIL_SCRIPT = "process.exit(3);\n";

@@ -4,6 +4,6 @@
     { "name": "Lint",       "command": "pnpm -r lint" },
     { "name": "Build",      "command": "pnpm -r build" },
     { "name": "Tests",      "command": "pnpm -r test" },
-    { "name": "Security",   "command": "semgrep --config=auto --json --no-git-ignore --quiet --metrics=off" }
+    { "name": "Security",   "command": "semgrep --config=/opt/sft/semgrep-rules --json --no-git-ignore --quiet --metrics=off" }
   ]
 }

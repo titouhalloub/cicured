@@ -140,7 +140,14 @@ function hasSemgrep() {
 
 function detectSemgrepTasks() {
   if (!hasSemgrep()) return [];
-  return [{ name: "Security", command: "semgrep --config=auto --json --no-git-ignore --quiet --metrics=off", timeout: 300000 }];
+  const RULES_DIR = "/opt/sft/semgrep-rules";
+  let config = "auto";
+  try {
+    if (existsSync(RULES_DIR) && readdirSync(RULES_DIR).length > 0) {
+      config = RULES_DIR;
+    }
+  } catch { /* fall through to auto */ }
+  return [{ name: "Security", command: `semgrep --config=${config} --json --no-git-ignore --quiet --metrics=off`, timeout: 300000 }];
 }
 
 // Cargo probe (Phase 3d-4): mirrors hasGo() — a module without a runnable

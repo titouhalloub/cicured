@@ -48,6 +48,20 @@ ENV CGO_ENABLED=0
 # future phase may mount a rule cache, same pattern as the pnpm store.
 RUN pip install --no-cache-dir --break-system-packages semgrep==1.173.0
 
+# Bake a pinned Semgrep rule set so the Security task never reaches
+# the network at scan time. Run a real scan against an empty dir to
+# force rule resolution into ~/.cache/semgrep, then move the cache to
+# /opt/sft/semgrep-rules where the sandbox user can read it on a
+# read-only rootfs. If the scan fails, the image build fails — no
+# silent empty rules dir.
+RUN mkdir -p /tmp/semgrep-warmup && \
+    cd /tmp/semgrep-warmup && \
+    semgrep --config=p/ci --json . > /dev/null && \
+    mkdir -p /opt/sft/semgrep-rules && \
+    cp -r /root/.cache/semgrep/. /opt/sft/semgrep-rules/ && \
+    chmod -R a+rX /opt/sft/semgrep-rules && \
+    rm -rf /tmp/semgrep-warmup
+
 # Rust toolchain (Phase 3d-4): rustup installer, not apk. Alpine's apk rust
 # package lags upstream and pulls a phantom gcc dependency. build-base +
 # musl-dev are the only apk prerequisites needed for linking. rustup-init

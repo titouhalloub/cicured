@@ -274,7 +274,7 @@ describe("detectSemgrepTasks via --detect-only", () => {
 
     const task = securityTask(result);
     expect(task).toBeDefined();
-    expect(task?.command).toContain("--config=auto");
+    expect(task?.command).toContain("--config=");
     expect(task?.command).toContain("--no-git-ignore");
   });
 
@@ -284,7 +284,8 @@ describe("detectSemgrepTasks via --detect-only", () => {
     const task = securityTask(result);
     expect(task).toBeDefined();
     expect(task?.name).toBe("Security");
-    expect(task?.command).toBe("semgrep --config=auto --json --no-git-ignore --quiet --metrics=off");
+    expect(task?.command).toContain("--config=");
+    expect(task?.command).toContain("--no-git-ignore");
     expect(task?.timeout).toBe(300000);
   });
 

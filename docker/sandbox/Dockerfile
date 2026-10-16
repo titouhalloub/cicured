@@ -46,7 +46,13 @@ ENV CGO_ENABLED=0
 # (PEP 668), same as the Python toolchain install. --config auto fetches rules
 # on first run and caches them in the container tmpfs (destroyed on exit); a
 # future phase may mount a rule cache, same pattern as the pnpm store.
-RUN pip install --no-cache-dir --break-system-packages semgrep==1.173.0
+RUN pip install --no-cache-dir --break-system-packages \
+        --retries 10 --timeout 300 \
+        semgrep==1.173.0 \
+    || pip install --no-cache-dir --break-system-packages \
+        --retries 10 --timeout 300 \
+        -i https://pypi.tuna.tsinghua.edu.cn/simple \
+        semgrep==1.173.0
 
 # Bake a pinned Semgrep rule set so the Security task never reaches
 # the network at scan time. Run a real scan against an empty dir to

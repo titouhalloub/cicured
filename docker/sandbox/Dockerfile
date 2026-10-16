@@ -33,14 +33,8 @@ RUN apk add --no-cache python3 py3-pip && \
 # pure-Go assumption explicit. No warm module cache — the first sandbox run on
 # a Go repo downloads modules from the network (known limitation, deferred like
 # the pnpm store cache).
-RUN set -e; \
-      url_primary="https://go.dev/dl/go1.23.3.linux-amd64.tar.gz"; \
-      url_mirror="https://mirrors.aliyun.com/golang/go1.23.3.linux-amd64.tar.gz"; \
-      if ! curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSL -o /tmp/go.tgz "$url_primary"; then \
-        curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSL -o /tmp/go.tgz "$url_mirror"; \
-      fi; \
-      tar -C /usr/local -xzf /tmp/go.tgz && \
-      rm /tmp/go.tgz
+COPY docker/sandbox/vendor/go1.23.3.linux-amd64.tar.gz /tmp/go.tgz
+RUN tar -C /usr/local -xzf /tmp/go.tgz && rm /tmp/go.tgz
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV CGO_ENABLED=0
 
@@ -51,13 +45,9 @@ ENV CGO_ENABLED=0
 # (PEP 668), same as the Python toolchain install. --config auto fetches rules
 # on first run and caches them in the container tmpfs (destroyed on exit); a
 # future phase may mount a rule cache, same pattern as the pnpm store.
-RUN pip install --no-cache-dir --break-system-packages \
-        --retries 10 --timeout 300 \
-        semgrep==1.173.0 \
-    || pip install --no-cache-dir --break-system-packages \
-        --retries 10 --timeout 300 \
-        -i https://pypi.tuna.tsinghua.edu.cn/simple \
-        semgrep==1.173.0
+COPY docker/sandbox/vendor/semgrep-1.173.0.whl /tmp/semgrep.whl
+RUN pip install --no-cache-dir --break-system-packages /tmp/semgrep.whl && \
+    rm /tmp/semgrep.whl
 
 # Bake a pinned Semgrep rule set as plain yaml. Fetching the bundle
 # directly from the registry avoids depending on semgrep's internal

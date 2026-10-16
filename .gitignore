@@ -39,3 +39,5 @@ packages/parser/test/fixtures/graph-fixture/graph-out.json
 # python bytecode from throwaway diagnostic scripts
 __pycache__/
 *.pyc
+
+docker/sandbox/vendor/

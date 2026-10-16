@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -32,17 +32,25 @@ const MISSING_PATH_DIR = path.join(tmpdir(), "sft-tools-absent-does-not-exist");
 const fixtures: string[] = [];
 
 beforeAll(() => {
-  // `node --version` exits 0 — enough for hasPython3()/hasGo()/hasSemgrep()/
-  // hasCargo(), which only check that the spawn did not error.
-  for (const [dir, exe] of [
-    [PY3_SHIM_DIR, "python3"],
-    [GO_SHIM_DIR, "go"],
-    [SEMGREP_SHIM_DIR, "semgrep"],
-    [CARGO_SHIM_DIR, "cargo"],
-  ] as const) {
-    const shim = path.join(dir, process.platform === "win32" ? `${exe}.exe` : exe);
-    copyFileSync(process.execPath, shim);
-    if (process.platform !== "win32") chmodSync(shim, 0o755);
+  // Tiny stand-in executables for python3 / go / semgrep / cargo. Each shim
+  // exits 0 when invoked with --version, which is all hasPython3() /
+  // hasGo() / hasSemgrep() / hasCargo() check. A shell script (~40 bytes)
+  // is used instead of copying the node binary (~100 MB) because /tmp may be
+  // a small tmpfs inside the sandbox.
+  const shims: [string, string, string][] = [
+    [PY3_SHIM_DIR, "python3", "Python 3.11.7"],
+    [GO_SHIM_DIR, "go", "go version go1.22.0 linux/amd64"],
+    [SEMGREP_SHIM_DIR, "semgrep", "1.173.0"],
+    [CARGO_SHIM_DIR, "cargo", "cargo 1.75.0 (1d8b05cdd 2023-11-20)"],
+  ];
+  for (const [dir, exe, version] of shims) {
+    const shim = path.join(dir, process.platform === "win32" ? `${exe}.cmd` : exe);
+    if (process.platform === "win32") {
+      writeFileSync(shim, [`@echo off`, `echo ${version}`, `exit /b 0`].join("\r\n") + "\r\n");
+    } else {
+      writeFileSync(shim, [`#!/bin/sh`, `echo "${version}"`, `exit 0`].join("\n") + "\n");
+      chmodSync(shim, 0o755);
+    }
   }
 });
 

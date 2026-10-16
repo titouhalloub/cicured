@@ -33,9 +33,14 @@ RUN apk add --no-cache python3 py3-pip && \
 # pure-Go assumption explicit. No warm module cache — the first sandbox run on
 # a Go repo downloads modules from the network (known limitation, deferred like
 # the pnpm store cache).
-RUN wget -q https://go.dev/dl/go1.23.3.linux-amd64.tar.gz -O /tmp/go.tgz && \
-    tar -C /usr/local -xzf /tmp/go.tgz && \
-    rm /tmp/go.tgz
+RUN set -e; \
+      url_primary="https://go.dev/dl/go1.23.3.linux-amd64.tar.gz"; \
+      url_mirror="https://mirrors.aliyun.com/golang/go1.23.3.linux-amd64.tar.gz"; \
+      if ! wget -q --tries=20 --timeout=300 --waitretry=10 --continue -O /tmp/go.tgz "$url_primary"; then \
+        wget -q --tries=20 --timeout=300 --waitretry=10 --continue -O /tmp/go.tgz "$url_mirror"; \
+      fi; \
+      tar -C /usr/local -xzf /tmp/go.tgz && \
+      rm /tmp/go.tgz
 ENV PATH="/usr/local/go/bin:${PATH}"
 ENV CGO_ENABLED=0
 
@@ -58,7 +63,8 @@ RUN pip install --no-cache-dir --break-system-packages \
 # directly from the registry avoids depending on semgrep's internal
 # cache layout, which changes between versions. World-readable so the
 # sandbox user can read it on a read-only rootfs.
-RUN curl -sSL https://semgrep.dev/c/p/ci -o /opt/sft/semgrep-rules.yaml && \
+RUN curl --retry 10 --retry-delay 5 --retry-all-errors -sSL \
+      https://semgrep.dev/c/p/ci -o /opt/sft/semgrep-rules.yaml && \
     chmod a+r /opt/sft/semgrep-rules.yaml
 
 # Rust toolchain (Phase 3d-4): rustup installer, not apk. Alpine's apk rust
@@ -76,8 +82,15 @@ ENV RUSTUP_HOME=/usr/local/rustup
 ENV PATH="/usr/local/cargo/bin:${PATH}"
 
 RUN apk add --no-cache build-base musl-dev curl && \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-      | sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path && \
+    ( \
+      curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSf https://sh.rustup.rs | \
+        sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
+    ) || ( \
+      RUSTUP_DIST_SERVER="https://mirrors.ustc.edu.cn/rust-static" \
+      RUSTUP_UPDATE_ROOT="https://mirrors.ustc.edu.cn/rust-static/rustup" \
+      curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSf https://sh.rustup.rs | \
+        sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
+    ) && \
     rustup component add clippy
 RUN chmod -R a+rX /usr/local/cargo /usr/local/rustup
 

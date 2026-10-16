@@ -13,7 +13,7 @@ FROM node:20-alpine
 # ca-certificates: TLS to the git host and the package registry.
 # Corepack is NOT installed here: node:20-alpine already bundles the binary, so
 # `corepack enable` below is all it takes to get pnpm/yarn (Spec §2 pre-flight).
-RUN apk add --no-cache git bash ca-certificates \
+RUN apk add --no-cache git bash ca-certificates curl \
     && corepack enable \
     && adduser -D -u 1001 -h /home/sandbox sandbox \
     && mkdir -p /workspace /opt/sft \
@@ -54,19 +54,12 @@ RUN pip install --no-cache-dir --break-system-packages \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
         semgrep==1.173.0
 
-# Bake a pinned Semgrep rule set so the Security task never reaches
-# the network at scan time. Run a real scan against an empty dir to
-# force rule resolution into ~/.cache/semgrep, then move the cache to
-# /opt/sft/semgrep-rules where the sandbox user can read it on a
-# read-only rootfs. If the scan fails, the image build fails — no
-# silent empty rules dir.
-RUN mkdir -p /tmp/semgrep-warmup && \
-    cd /tmp/semgrep-warmup && \
-    semgrep --config=p/ci --json . > /dev/null && \
-    mkdir -p /opt/sft/semgrep-rules && \
-    cp -r /root/.cache/semgrep/. /opt/sft/semgrep-rules/ && \
-    chmod -R a+rX /opt/sft/semgrep-rules && \
-    rm -rf /tmp/semgrep-warmup
+# Bake a pinned Semgrep rule set as plain yaml. Fetching the bundle
+# directly from the registry avoids depending on semgrep's internal
+# cache layout, which changes between versions. World-readable so the
+# sandbox user can read it on a read-only rootfs.
+RUN curl -sSL https://semgrep.dev/c/p/ci -o /opt/sft/semgrep-rules.yaml && \
+    chmod a+r /opt/sft/semgrep-rules.yaml
 
 # Rust toolchain (Phase 3d-4): rustup installer, not apk. Alpine's apk rust
 # package lags upstream and pulls a phantom gcc dependency. build-base +

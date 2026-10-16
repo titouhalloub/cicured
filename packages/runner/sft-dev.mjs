@@ -3,7 +3,7 @@
 // Contract: writes sft-report.json in cwd; exit 0 = all tasks passed, 1 = >=1 task failed, 2 = runner crash.
 // Report schema stays version 2; new fields are additive: task.skipped, task.truncated, report.warnings.
 import { spawn, spawnSync } from "node:child_process";
-import { writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync, statSync, readdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
@@ -140,11 +140,11 @@ function hasSemgrep() {
 
 function detectSemgrepTasks() {
   if (!hasSemgrep()) return [];
-  const RULES_DIR = "/opt/sft/semgrep-rules";
+  const RULES_FILE = "/opt/sft/semgrep-rules.yaml";
   let config = "auto";
   try {
-    if (existsSync(RULES_DIR) && readdirSync(RULES_DIR).length > 0) {
-      config = RULES_DIR;
+    if (existsSync(RULES_FILE) && statSync(RULES_FILE).size > 0) {
+      config = RULES_FILE;
     }
   } catch { /* fall through to auto */ }
   return [{ name: "Security", command: `semgrep --config=${config} --json --no-git-ignore --quiet --metrics=off`, timeout: 300000 }];

@@ -61,6 +61,7 @@ afterEach(() => {
 interface DetectedTask {
   name: string;
   command: string;
+  timeout?: number;
   parser?: string;
   parserConfig?: unknown;
 }
@@ -265,8 +266,27 @@ describe("detectSemgrepTasks via --detect-only", () => {
 
     const task = securityTask(result);
     expect(task).toBeDefined();
-    expect(task?.command).toContain("--config auto");
-    expect(task?.command).toContain("--metrics=off");
+    expect(task?.command).toContain("--config=auto");
+    expect(task?.command).toContain("--no-git-ignore");
+  });
+
+  it("Security task has the expected name, command, and timeout", () => {
+    const result = detect({ "package.json": '{"scripts": { "test": "vitest run" }}\n' });
+
+    const task = securityTask(result);
+    expect(task).toBeDefined();
+    expect(task?.name).toBe("Security");
+    expect(task?.command).toBe("semgrep --config=auto --json --no-git-ignore --quiet --metrics=off");
+    expect(task?.timeout).toBe(300000);
+  });
+
+  it("Security task is added after Tests, not before", () => {
+    const result = detect({ "package.json": '{"scripts": { "test": "vitest run" }}\n' });
+
+    const list = names(result);
+    expect(list).toContain("Tests");
+    expect(list).toContain("Security");
+    expect(list.indexOf("Security")).toBeGreaterThan(list.indexOf("Tests"));
   });
 
   it("semgrep missing adds no Security task and no warning", () => {

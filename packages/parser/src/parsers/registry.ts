@@ -47,7 +47,9 @@ export const PARSERS: Record<string, Parser> = {
   ruff: { id: "ruff", parse: parseRuff },
   "go-test": { id: "go-test", parse: parseGoTest },
   "go-vet": { id: "go-vet", parse: parseGoVet },
-  semgrep: { id: "semgrep", parse: parseSemgrep },
+  // stderr is diagnostics only for semgrep; parseSemgrep takes stdout (+ an
+  // optional warnings sink) and never throws.
+  semgrep: { id: "semgrep", parse: (stdout, _stderr) => parseSemgrep(stdout) },
   "cargo-clippy": { id: "cargo-clippy", parse: parseCargoClippy },
   "cargo-test": { id: "cargo-test", parse: parseCargoTest },
   // Config tier (Phase 3e): no name mapping — these are only reachable through

@@ -138,7 +138,7 @@ function hasSemgrep() {
 
 function detectSemgrepTasks() {
   if (!hasSemgrep()) return [];
-  return [{ name: "Security", command: "semgrep scan --json --config auto --quiet --metrics=off ." }];
+  return [{ name: "Security", command: "semgrep --config=auto --json --no-git-ignore --quiet --metrics=off", timeout: 300000 }];
 }
 
 // Cargo probe (Phase 3d-4): mirrors hasGo() — a module without a runnable
@@ -299,7 +299,7 @@ async function main() {
   for (const task of tasks) {
     const remaining = DEADLINE_MS - (Date.now() - RUN_STARTED);
     if (remaining <= 0) { results.push(skippedResult(task, "global deadline exceeded")); continue; }
-    results.push(await runTask(task, Math.min(TASK_TIMEOUT_MS, remaining)));
+    results.push(await runTask(task, Math.min(task.timeout ?? TASK_TIMEOUT_MS, remaining)));
   }
 
   const report = writeReport();

@@ -24,7 +24,7 @@ describe("worker env (mirrors apps/api/src/config/env.ts)", () => {
     expect(env.SANDBOX_IMAGE).toBe("cicured/sandbox:node20");
     expect(env.REPORTS_DIR).toBe("./tmp/reports");
     expect(env.SFT_TASK_TIMEOUT_MS).toBe(600_000);
-    expect(env.SFT_DEADLINE_BUDGET_MS).toBe(900_000);
+    expect(env.SFT_DEADLINE_BUDGET_MS).toBe(1_800_000);
   });
 
   it("defaults the runner mount to the pinned artifact", () => {

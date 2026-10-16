@@ -21,7 +21,7 @@ process.env.CI = "true";
 // ── 2. Limits ──────────────────────────────────────────────────────────
 const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : d);
 const TASK_TIMEOUT_MS = num(process.env.SFT_TASK_TIMEOUT_MS, 10 * 60 * 1000); // per task
-const DEADLINE_MS = num(process.env.SFT_DEADLINE_MS, 12 * 60 * 1000);          // whole run (pod budget is 15 min)
+const DEADLINE_MS = num(process.env.SFT_DEADLINE_MS, 25 * 60 * 1000);          // whole run (pod budget is 30 min)
 const KILL_GRACE_MS = 5000;
 const TAIL_CHARS = 200000;                                                     // per stream, per task
 

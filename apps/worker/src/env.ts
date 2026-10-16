@@ -45,7 +45,7 @@ export const EnvSchema = z.object({
   /** Per-task cap handed to the runner (runner default is also 10 min). */
   SFT_TASK_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
   /** Wall-clock budget per run: the container is killed after this. */
-  SFT_DEADLINE_BUDGET_MS: z.coerce.number().int().positive().default(900_000),
+  SFT_DEADLINE_BUDGET_MS: z.coerce.number().int().positive().default(1_800_000),
 
   /** Host path of the pinned runner, bind-mounted read-only into the sandbox. */
   SFT_RUNNER_HOST_PATH: z.string().min(1).default(DEFAULT_RUNNER_HOST_PATH),

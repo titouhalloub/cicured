@@ -56,7 +56,11 @@ function ensureBundle(): void {
     cwd: ws,
     stdio: "inherit",
     env: process.env,
+    // Windows installs pnpm as a .cmd shim, which spawnSync can only launch
+    // through the shell; other platforms execute the binary directly.
+    shell: process.platform === "win32",
   });
+  if (result.error) throw result.error;
   expect(result.status).toBe(0);
   expect(existsSync(CLI_PATH)).toBe(true);
   expect(existsSync(WRAPPER_PATH)).toBe(true);

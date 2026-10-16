@@ -1,4 +1,4 @@
-import type { Neighborhood } from "@sft/parser";
+import { formatNeighborhoodBlock, type Neighborhood } from "@sft/parser";
 import { z } from "zod";
 
 /** A validated model suggestion — the shape the CLI prints and applies. */
@@ -62,36 +62,6 @@ function stripFences(text: string): string {
   return match?.[1]?.trim() ?? trimmed;
 }
 
-/** Formats the neighborhood block; empty sections are omitted entirely. */
-function buildNeighborhoodBlock(n: Neighborhood): string {
-  const lines: string[] = [
-    "Code graph neighborhood:",
-    "<codegraph_neighborhood>",
-    `File: ${n.file.path}`,
-    `Function: ${n.function?.name ?? "(none)"} (line ${n.function?.line ?? 0})`,
-  ];
-  if (n.callers.length > 0) {
-    lines.push("Called by:");
-    for (const caller of n.callers) {
-      lines.push(`  - ${caller.file}:${caller.line} ${caller.name}`);
-    }
-  }
-  if (n.callees.length > 0) {
-    lines.push("Calls:");
-    for (const callee of n.callees) {
-      lines.push(`  - ${callee.file}:${callee.line} ${callee.name}`);
-    }
-  }
-  if (n.tests.length > 0) {
-    lines.push("Tests that import this file:");
-    for (const testPath of n.tests) {
-      lines.push(`  - ${testPath}`);
-    }
-  }
-  lines.push("</codegraph_neighborhood>");
-  return lines.join("\n");
-}
-
 function buildUserContent(input: SuggestInput): string {
   const finding = {
     ruleId: input.ruleId,
@@ -107,7 +77,7 @@ function buildUserContent(input: SuggestInput): string {
     "",
   ];
   if (input.neighborhood != null) {
-    parts.push(buildNeighborhoodBlock(input.neighborhood), "");
+    parts.push(formatNeighborhoodBlock(input.neighborhood), "");
   }
   parts.push(
     "Code snippet:",

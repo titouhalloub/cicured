@@ -46,6 +46,7 @@ export { tsWalker } from "./graph/ts-walker";
 export { pythonWalker } from "./graph/python-walker";
 export { goWalker } from "./graph/go-walker";
 export { rustWalker } from "./graph/rust-walker";
+export { formatNeighborhoodBlock } from "./graph/prompt";
 
 /**
  * Deterministic findings parser (Spec §4 step 8: deterministic first, no

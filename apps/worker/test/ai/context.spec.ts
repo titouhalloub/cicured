@@ -1,4 +1,8 @@
-import type { FindingsWithFingerprint, Neighborhood } from "@sft/parser";
+import {
+  formatNeighborhoodBlock,
+  type FindingsWithFingerprint,
+  type Neighborhood,
+} from "@sft/parser";
 import { describe, expect, it } from "vitest";
 import {
   buildSuggestionPrompt,
@@ -113,6 +117,33 @@ describe("buildSuggestionPrompt neighborhood block (Phase 3c-2)", () => {
     const prompt = buildSuggestionPrompt(FINDING, "const x = 1;", null);
 
     expect(prompt.user).not.toContain("codegraph_neighborhood");
+  });
+
+  it("omits <codegraph_neighborhood> when the neighborhood is undefined", () => {
+    const prompt = buildSuggestionPrompt(FINDING, "const x = 1;");
+
+    expect(prompt.user).not.toContain("codegraph_neighborhood");
+  });
+
+  it("places the block between the finding and the code snippet", () => {
+    const prompt = buildSuggestionPrompt(FINDING, "const x = 1;", NEIGHBORHOOD);
+    const { user } = prompt;
+
+    // Index ordering only — no assertions on surrounding text.
+    const findingEnd = user.indexOf("</untrusted_finding>");
+    const blockStart = user.indexOf("<codegraph_neighborhood>");
+    const codeStart = user.indexOf("<untrusted_code>");
+    expect(findingEnd).toBeGreaterThanOrEqual(0);
+    expect(blockStart).toBeGreaterThan(findingEnd);
+    expect(codeStart).toBeGreaterThan(blockStart);
+  });
+
+  it("renders the same block bytes as formatNeighborhoodBlock", () => {
+    const prompt = buildSuggestionPrompt(FINDING, "const x = 1;", NEIGHBORHOOD);
+    const block = formatNeighborhoodBlock(NEIGHBORHOOD);
+
+    expect(block).not.toBe("");
+    expect(prompt.user).toContain(block);
   });
 });
 

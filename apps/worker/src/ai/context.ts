@@ -1,4 +1,8 @@
-import type { FindingsWithFingerprint, Neighborhood } from "@sft/parser";
+import {
+  formatNeighborhoodBlock,
+  type FindingsWithFingerprint,
+  type Neighborhood,
+} from "@sft/parser";
 
 /** ~8k-token context budget for the LLM prompt, per spec §7. */
 export const CONTEXT_CHAR_BUDGET = 32_000;
@@ -27,7 +31,7 @@ export interface SuggestionPrompt {
 export function buildSuggestionPrompt(
   finding: FindingsWithFingerprint,
   snippet: string,
-  neighborhood: Neighborhood | null,
+  neighborhood?: Neighborhood | null,
   promptVersion: string = "m4a-v1",
 ): SuggestionPrompt {
   const systemPrompt = `You are a deterministic code-fix assistant. You receive (1) one structured finding from a build failure and (2) a code snippet from the file the finding points to.
@@ -59,7 +63,7 @@ Respond with the JSON object only.
   const mid = `
 </untrusted_finding>
 
-${neighborhood === null ? "" : `${buildNeighborhoodBlock(neighborhood)}\n\n`}Code snippet (lines around the finding):
+${neighborhood == null ? "" : `${formatNeighborhoodBlock(neighborhood)}\n\n`}Code snippet (lines around the finding):
 <untrusted_code>
 `;
   const postamble = `
@@ -78,35 +82,11 @@ ${neighborhood === null ? "" : `${buildNeighborhoodBlock(neighborhood)}\n\n`}Cod
 }
 
 /**
- * Phase 3c-2: format the neighborhood block exactly as the CLI's
- * buildAnthropicMessages does (packages/cli/src/llm.ts) so both prompts read
- * identically. Sections with no entries are omitted along with their heading.
+ * Phase 3c-2: the worker renders the neighborhood block through the shared
+ * @sft/parser formatter so its bytes are identical to the CLI's prompt.
+ * Kept as an export because the repair-retry prompt in generate.ts embeds
+ * the same block.
  */
 export function buildNeighborhoodBlock(neighborhood: Neighborhood): string {
-  const lines: string[] = [
-    "Code graph neighborhood:",
-    "<codegraph_neighborhood>",
-    `File: ${neighborhood.file.path}`,
-    `Function: ${neighborhood.function?.name ?? "(none)"} (line ${neighborhood.function?.line ?? 0})`,
-  ];
-  if (neighborhood.callers.length > 0) {
-    lines.push("Called by:");
-    for (const caller of neighborhood.callers) {
-      lines.push(`  - ${caller.file}:${caller.line} ${caller.name}`);
-    }
-  }
-  if (neighborhood.callees.length > 0) {
-    lines.push("Calls:");
-    for (const callee of neighborhood.callees) {
-      lines.push(`  - ${callee.file}:${callee.line} ${callee.name}`);
-    }
-  }
-  if (neighborhood.tests.length > 0) {
-    lines.push("Tests that import this file:");
-    for (const testPath of neighborhood.tests) {
-      lines.push(`  - ${testPath}`);
-    }
-  }
-  lines.push("</codegraph_neighborhood>");
-  return lines.join("\n");
+  return formatNeighborhoodBlock(neighborhood);
 }

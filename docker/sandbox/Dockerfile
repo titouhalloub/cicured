@@ -71,17 +71,22 @@ ENV CARGO_HOME=/usr/local/cargo
 ENV RUSTUP_HOME=/usr/local/rustup
 ENV PATH="/usr/local/cargo/bin:${PATH}"
 
-RUN apk add --no-cache build-base musl-dev curl && \
-    ( \
-      curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSf https://sh.rustup.rs | \
-        sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
-    ) || ( \
-      RUSTUP_DIST_SERVER="https://mirrors.ustc.edu.cn/rust-static" \
-      RUSTUP_UPDATE_ROOT="https://mirrors.ustc.edu.cn/rust-static/rustup" \
-      curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSf https://sh.rustup.rs | \
-        sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
-    ) && \
-    rustup component add clippy
+RUN printf '%s\n' \
+        "https://mirrors.ustc.edu.cn/alpine/latest-stable/main" \
+        "https://mirrors.ustc.edu.cn/alpine/latest-stable/community" \
+        > /etc/apk/repositories && \
+      apk update --no-cache && \
+      apk add --no-cache build-base musl-dev curl && \
+      ( \
+        curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSf https://sh.rustup.rs | \
+          sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
+      ) || ( \
+        RUSTUP_DIST_SERVER="https://mirrors.ustc.edu.cn/rust-static" \
+        RUSTUP_UPDATE_ROOT="https://mirrors.ustc.edu.cn/rust-static/rustup" \
+        curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSf https://sh.rustup.rs | \
+          sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
+      ) && \
+      rustup component add clippy
 RUN chmod -R a+rX /usr/local/cargo /usr/local/rustup
 
 COPY docker/sandbox/entrypoint.sh /opt/sft/entrypoint.sh

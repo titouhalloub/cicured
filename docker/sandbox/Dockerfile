@@ -36,8 +36,8 @@ RUN apk add --no-cache python3 py3-pip && \
 RUN set -e; \
       url_primary="https://go.dev/dl/go1.23.3.linux-amd64.tar.gz"; \
       url_mirror="https://mirrors.aliyun.com/golang/go1.23.3.linux-amd64.tar.gz"; \
-      if ! wget -q --tries=20 --timeout=300 --waitretry=10 --continue -O /tmp/go.tgz "$url_primary"; then \
-        wget -q --tries=20 --timeout=300 --waitretry=10 --continue -O /tmp/go.tgz "$url_mirror"; \
+      if ! curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSL -o /tmp/go.tgz "$url_primary"; then \
+        curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSL -o /tmp/go.tgz "$url_mirror"; \
       fi; \
       tar -C /usr/local -xzf /tmp/go.tgz && \
       rm /tmp/go.tgz

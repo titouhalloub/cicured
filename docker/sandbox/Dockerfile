@@ -71,19 +71,13 @@ ENV CARGO_HOME=/usr/local/cargo
 ENV RUSTUP_HOME=/usr/local/rustup
 ENV PATH="/usr/local/cargo/bin:${PATH}"
 
-RUN --mount=type=bind,source=docker/sandbox/vendor,target=/tmp/apks \
-    apk add --no-network --allow-untrusted /tmp/apks/*.apk
+COPY docker/sandbox/vendor/*.apk /tmp/apks/
+RUN apk add --no-network --allow-untrusted /tmp/apks/*.apk && \
+    rm -rf /tmp/apks
 
-RUN { \
-      curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSf https://sh.rustup.rs | \
-        sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
-      || \
-      RUSTUP_DIST_SERVER="https://mirrors.ustc.edu.cn/rust-static" \
-      RUSTUP_UPDATE_ROOT="https://mirrors.ustc.edu.cn/rust-static/rustup" \
-      curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSf https://sh.rustup.rs | \
-        sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
-    ; } && \
-      rustup component add clippy
+COPY docker/sandbox/vendor/cargo /usr/local/cargo
+COPY docker/sandbox/vendor/rustup /usr/local/rustup
+RUN chmod -R a+rX /usr/local/cargo /usr/local/rustup
 RUN chmod -R a+rX /usr/local/cargo /usr/local/rustup
 
 # Graph builder (Phase 3c-3): bundle + web-tree-sitter + flat grammar dir,
@@ -91,6 +85,23 @@ RUN chmod -R a+rX /usr/local/cargo /usr/local/rustup
 # a bundle change does not invalidate the toolchain download.
 COPY docker/sandbox/.graph-stage/ /opt/sft/
 RUN chmod -R a+rX /opt/sft/build-graph.js /opt/sft/node_modules /opt/sft/grammars
+
+# pnpm is installed globally here so the sandbox never has to
+# download a package manager from Corepack's CDN at run time.
+# Version matches the packageManager field in the pinned repo.
+COPY docker/sandbox/vendor/pnpm-12.6.0.tgz /tmp/pnpm.tgz
+RUN set -e; \
+    rm -f /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg; \
+    rm -rf /usr/local/lib/node_modules/pnpm; \
+    mkdir -p /usr/local/lib/node_modules; \
+    tar -xzf /tmp/pnpm.tgz -C /usr/local/lib/node_modules; \
+    mv /usr/local/lib/node_modules/package /usr/local/lib/node_modules/pnpm; \
+    printf '%s\n' '#!/bin/sh' 'exec node /usr/local/lib/node_modules/pnpm/bin/pnpm.mjs "$@"' > /usr/local/bin/pnpm; \
+    printf '%s\n' '#!/bin/sh' 'exec node /usr/local/lib/node_modules/pnpm/bin/pnpx.mjs "$@"' > /usr/local/bin/pnpx; \
+    chmod +x /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/lib/node_modules/pnpm/bin/pnpm.mjs; \
+    rm -f /tmp/pnpm.tgz; \
+    /usr/local/bin/pnpm --version
+
 
 COPY docker/sandbox/entrypoint.sh /opt/sft/entrypoint.sh
 RUN chmod +x /opt/sft/entrypoint.sh

@@ -103,6 +103,12 @@ RUN set -e; \
     /usr/local/bin/pnpm --version
 
 
+# pnpm is installed globally here so the sandbox never has to
+# download a package manager from Corepack's CDN at run time.
+# Version matches the packageManager field in the pinned repo.
+RUN npm install -g pnpm@12.6.0 && \
+    pnpm --version
+
 COPY docker/sandbox/entrypoint.sh /opt/sft/entrypoint.sh
 RUN chmod +x /opt/sft/entrypoint.sh
 

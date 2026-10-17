@@ -71,13 +71,8 @@ ENV CARGO_HOME=/usr/local/cargo
 ENV RUSTUP_HOME=/usr/local/rustup
 ENV PATH="/usr/local/cargo/bin:${PATH}"
 
-COPY docker/sandbox/vendor/*.apk /tmp/apks/x86_64/
-RUN cd /tmp/apks/x86_64 && \
-    apk index --no-warnings -o APKINDEX.tar.gz *.apk && \
-    apk add --no-network --allow-untrusted \
-        --repository /tmp/apks \
-        build-base musl-dev && \
-    rm -rf /tmp/apks
+RUN --mount=type=bind,source=docker/sandbox/vendor,target=/tmp/apks \
+    apk add --no-network --allow-untrusted /tmp/apks/*.apk
 
 RUN { \
       curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSf https://sh.rustup.rs | \

@@ -5,7 +5,7 @@ import { UUID_PATTERN } from "@sft/schemas";
 import type { WorkerEnv } from "../env";
 
 /** Spec §8 sandbox limits: 2 CPU / 4 GB / non-root / read-only / tmpfs. */
-const SANDBOX_MEMORY_BYTES = 4 * 1024 * 1024 * 1024;
+const SANDBOX_MEMORY_BYTES = 8 * 1024 * 1024 * 1024;
 const SANDBOX_NANO_CPUS = 2_000_000_000;
 const WORKSPACE_TMPFS = "size=3g,uid=1001,gid=1001,mode=0755,exec";
 /** A read-only rootfs leaves /tmp unusable; give tools a small writable area. */

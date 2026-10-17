@@ -7,8 +7,9 @@ const DATABASE_URL = process.env.DATABASE_URL!;
 const REDIS_URL = process.env.REDIS_URL!;
 const SFT_ENCRYPTION_KEY = process.env.SFT_ENCRYPTION_KEY!;
 const QUEUE_NAME = process.env.SFT_QUEUE_NAME ?? "sft-runs";
-const INSTALLATION_ID = "166710597";
-const REPO_FULL_NAME = "titouhalloub/cicured";
+const INSTALLATION_ID = process.env.SFT_SEED_INSTALLATION_ID ?? "166710597";
+const REPO_FULL_NAME = process.env.SFT_SEED_REPO ?? "titouhalloub/cicured";
+const BRANCH = process.env.SFT_SEED_BRANCH ?? "main";
 
 function parseKey(raw: string): Buffer {
   const trimmed = raw.trim();
@@ -51,7 +52,7 @@ async function main() {
   await pool.query(
     `INSERT INTO runs (id, project_id, sha, branch, trigger, status)
      VALUES ($1, $2, $3, $4, $5, $6)`,
-    [runId, projectId, null, "main", "manual", "queued"]
+    [runId, projectId, null, BRANCH, "manual", "queued"]
   );
 
   await queue.add("run", { runId, projectId }, { jobId: runId });

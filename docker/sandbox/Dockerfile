@@ -71,22 +71,24 @@ ENV CARGO_HOME=/usr/local/cargo
 ENV RUSTUP_HOME=/usr/local/rustup
 ENV PATH="/usr/local/cargo/bin:${PATH}"
 
-COPY docker/sandbox/vendor/*.apk /tmp/apks/
-RUN cd /tmp/apks && \
+COPY docker/sandbox/vendor/*.apk /tmp/apks/x86_64/
+RUN cd /tmp/apks/x86_64 && \
     apk index --no-warnings -o APKINDEX.tar.gz *.apk && \
     apk add --no-network --allow-untrusted \
-        --repository /tmp/apks build-base musl-dev && \
-    rm -rf /tmp/apks && \
-    ( \
+        --repository /tmp/apks \
+        build-base musl-dev && \
+    rm -rf /tmp/apks
+
+RUN { \
       curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSf https://sh.rustup.rs | \
         sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
-    ) || ( \
+      || \
       RUSTUP_DIST_SERVER="https://mirrors.ustc.edu.cn/rust-static" \
       RUSTUP_UPDATE_ROOT="https://mirrors.ustc.edu.cn/rust-static/rustup" \
       curl --retry 10 --retry-delay 5 --retry-all-errors --connect-timeout 30 -sSf https://sh.rustup.rs | \
         sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
-    ) && \
-    rustup component add clippy
+    ; } && \
+      rustup component add clippy
 RUN chmod -R a+rX /usr/local/cargo /usr/local/rustup
 
 COPY docker/sandbox/entrypoint.sh /opt/sft/entrypoint.sh

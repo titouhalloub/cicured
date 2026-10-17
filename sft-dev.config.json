@@ -1,4 +1,4 @@
-﻿{
+{
   "tasks": [
     { "name": "Type Check", "command": "pnpm -r typecheck" },
     { "name": "Lint",       "command": "pnpm -r lint" },

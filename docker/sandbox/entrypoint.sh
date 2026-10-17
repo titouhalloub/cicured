@@ -83,7 +83,7 @@ export PNPM_STORE_DIR=/pnpm-store
 export npm_config_store_dir=/pnpm-store
 install_started_ms="$(epoch_ms)"
 if [ -f pnpm-lock.yaml ]; then
-  pnpm install --frozen-lockfile --store-dir /pnpm-store --prefer-offline
+  pnpm install --frozen-lockfile --store-dir /pnpm-store --offline
 elif [ -f package-lock.json ]; then
   npm ci
 elif [ -f yarn.lock ]; then

@@ -37,6 +37,10 @@ export COREPACK_HOME="$WORKSPACE/.corepack"
 # Corepack would otherwise block on "Do you want to continue? [Y/n]" when it
 # downloads the package manager pinned by the repo's packageManager field.
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+# pnpm is baked into the image (see Dockerfile). Tell Corepack to
+# use the on-PATH binary and not attempt a download. STRICT=0 means
+# a minor version mismatch warns instead of failing the run.
+export COREPACK_ENABLE_STRICT=0
 export npm_config_cache="$WORKSPACE/.npm"
 export PNPM_HOME="$WORKSPACE/.pnpm"
 export YARN_CACHE_FOLDER="$WORKSPACE/.yarn"
@@ -79,7 +83,7 @@ export PNPM_STORE_DIR=/pnpm-store
 export npm_config_store_dir=/pnpm-store
 install_started_ms="$(epoch_ms)"
 if [ -f pnpm-lock.yaml ]; then
-  pnpm install --frozen-lockfile --store-dir /pnpm-store
+  pnpm install --frozen-lockfile --store-dir /pnpm-store --prefer-offline
 elif [ -f package-lock.json ]; then
   npm ci
 elif [ -f yarn.lock ]; then

@@ -107,6 +107,34 @@ while IFS='=' read -r name _; do
   esac
 done < <(env)
 
+# ── 5b. Code graph (Phase 3c-3) ────────────────────────────────────────────
+# After the scrub (no credentials in env while parsing untrusted files), before
+# the runner (pristine tree). Non-fatal: on failure the worker uses null.
+# Scratch files live under $WORKSPACE: the root filesystem is read-only.
+if [ -f /opt/sft/build-graph.js ] && [ -d /opt/sft/grammars ]; then
+  graph_tmp="$WORKSPACE/.sft-graph.json"
+  graph_err="$WORKSPACE/.graph-build.err"
+  graph_started_ms="$(epoch_ms)"
+  if SFT_PARSER_GRAMMARS_DIR=/opt/sft/grammars \
+       timeout 120 node /opt/sft/build-graph.js "$REPO_DIR" >"$graph_tmp" 2>"$graph_err" \
+     && cp "$graph_tmp" /out/sft-graph.json 2>/dev/null; then
+    graph_ms=$(( $(epoch_ms) - graph_started_ms ))
+    log "phase=graph ok duration_ms=${graph_ms}"
+  else
+    graph_ms=$(( $(epoch_ms) - graph_started_ms ))
+    log "phase=graph failed duration_ms=${graph_ms}"
+    cat "$graph_err" >&2 || true
+    rm -f /out/sft-graph.json 2>/dev/null || true
+  fi
+  rm -f "$graph_tmp" "$graph_err"
+  # The graph's wall time comes out of the runner's budget.
+  deadline_ms=$(( deadline_ms - graph_ms ))
+  if [ "$deadline_ms" -lt "$MIN_DEADLINE_MS" ]; then deadline_ms="$MIN_DEADLINE_MS"; fi
+  export SFT_DEADLINE_MS="$deadline_ms"
+else
+  log "phase=graph skipped: bundle or grammars missing"
+fi
+
 # ── 6. Run the pinned runner ────────────────────────────────────────────────
 # `exec` replaces this shell, so the runner's exit code becomes the container's.
 cd "$REPO_DIR"

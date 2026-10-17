@@ -86,6 +86,12 @@ RUN { \
       rustup component add clippy
 RUN chmod -R a+rX /usr/local/cargo /usr/local/rustup
 
+# Graph builder (Phase 3c-3): bundle + web-tree-sitter + flat grammar dir,
+# staged by build.sh with symlinks dereferenced. Placed after the Rust layers so
+# a bundle change does not invalidate the toolchain download.
+COPY docker/sandbox/.graph-stage/ /opt/sft/
+RUN chmod -R a+rX /opt/sft/build-graph.js /opt/sft/node_modules /opt/sft/grammars
+
 COPY docker/sandbox/entrypoint.sh /opt/sft/entrypoint.sh
 RUN chmod +x /opt/sft/entrypoint.sh
 

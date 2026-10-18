@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../src/llm", () => ({
   explainFinding: vi.fn(),
   suggestFix: vi.fn(),
-  buildAnthropicMessages: vi.fn(),
+  buildMessages: vi.fn(),
+  createProvider: vi.fn(),
 }));
 
 import { explainFinding } from "../src/llm";
@@ -81,10 +82,10 @@ describe("explainCommand", () => {
     expect(stderr.join("")).toContain("Finding #99 out of range (have 1).");
   });
 
-  it("returns 1 when ANTHROPIC_API_KEY is unset", async () => {
+  it("returns 1 when no LLM provider is configured", async () => {
     writeReport();
     expect(await explainCommand(["1"])).toBe(1);
-    expect(stderr.join("")).toContain("Set ANTHROPIC_API_KEY to use sft explain.");
+    expect(stderr.join("")).toContain("No LLM provider configured");
   });
 
   it("returns 0 and prints something when the LLM stub returns text", async () => {

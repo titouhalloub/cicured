@@ -1,11 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-// Namespace import, not a named one: @sft/schemas has no "type": "module"
-// and no exports map, so Node's native ESM loader (via tsx) reads it as CJS
-// and cjs-module-lexer cannot statically resolve the barrel `export *` chain.
 import * as schemas from "@sft/schemas";
 import { blastRadiusFor, buildCodeGraph, parseReport } from "@sft/parser";
-import { explainFinding, type SuggestInput } from "../llm";
+import { createProvider, explainFinding, type SuggestInput } from "../llm";
 import { snippetFor } from "../snippet";
 import { banner } from "../ui";
 
@@ -48,12 +45,6 @@ export async function explainCommand(args: string[]): Promise<number> {
   const graph = await buildCodeGraph({ rootDir: process.cwd() });
   const neighborhood = blastRadiusFor(graph, finding);
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    process.stderr.write("Set ANTHROPIC_API_KEY to use sft explain.\n");
-    return 1;
-  }
-
   const input: SuggestInput = {
     ruleId: finding.ruleId,
     file: finding.file,
@@ -64,7 +55,8 @@ export async function explainCommand(args: string[]): Promise<number> {
   };
 
   try {
-    const explanation = await explainFinding(input, { apiKey });
+    const provider = createProvider();
+    const explanation = await explainFinding(provider, input);
     process.stdout.write(`${explanation}\n\n`);
     process.stdout.write(`${banner("Context")}\n`);
     process.stdout.write(`File: ${finding.file}:${finding.line}:${finding.col}\n`);

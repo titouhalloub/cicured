@@ -8,7 +8,7 @@ import path from "node:path";
 // and cjs-module-lexer cannot statically resolve the barrel `export *` chain.
 import * as schemas from "@sft/schemas";
 import { blastRadiusFor, buildCodeGraph, parseReport } from "@sft/parser";
-import { suggestFix, type LlmSuggestion, type SuggestInput } from "../llm";
+import { createProvider, suggestFix, type LlmSuggestion, type SuggestInput } from "../llm";
 import { snippetFor } from "../snippet";
 import { banner } from "../ui";
 
@@ -103,12 +103,6 @@ export async function fixCommand(args: string[]): Promise<number> {
   const graph = await buildCodeGraph({ rootDir: process.cwd() });
   const neighborhood = blastRadiusFor(graph, finding);
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    process.stderr.write("Set ANTHROPIC_API_KEY to use sft fix.\n");
-    return 1;
-  }
-
   const input: SuggestInput = {
     ruleId: finding.ruleId,
     file: finding.file,
@@ -120,7 +114,8 @@ export async function fixCommand(args: string[]): Promise<number> {
 
   let suggestion: LlmSuggestion;
   try {
-    suggestion = await suggestFix(input, { apiKey });
+    const provider = createProvider();
+    suggestion = await suggestFix(provider, input);
   } catch (error) {
     process.stderr.write(`suggest failed: ${String(error)}\n`);
     return 1;

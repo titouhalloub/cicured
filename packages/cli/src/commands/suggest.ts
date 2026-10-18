@@ -6,7 +6,7 @@ import path from "node:path";
 // A namespace import exposes the detected exports at runtime.
 import * as schemas from "@sft/schemas";
 import type { SftReportV2 } from "@sft/schemas";
-import { suggestFix } from "../llm";
+import { createProvider, suggestFix } from "../llm";
 import { banner, fail } from "../ui";
 
 /** Hard cap on the failure output forwarded to the model. */
@@ -59,16 +59,10 @@ export async function suggestCommand(_args: string[]): Promise<number> {
   process.stderr.write(`${failedOutput}\n`);
   process.stdout.write(`${banner("AI suggestion (BYOK)")}\n`);
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    process.stdout.write(
-      "Set ANTHROPIC_API_KEY to use sft suggest. Get a key at https://console.anthropic.com/\n",
-    );
-    return 1;
-  }
-
   try {
+    const provider = createProvider();
     const suggestion = await suggestFix(
+      provider,
       {
         ruleId: "unknown",
         file: "<see report>",
@@ -77,7 +71,6 @@ export async function suggestCommand(_args: string[]): Promise<number> {
         // Phase 2 has no snippet fetcher — the failure output is the context.
         snippet: "",
       },
-      { apiKey },
     );
     process.stdout.write(`${suggestion.explanation}\n\n${suggestion.patchDiff}\n`);
     return 0;

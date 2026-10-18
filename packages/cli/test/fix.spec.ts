@@ -10,7 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../src/llm", () => ({
   suggestFix: vi.fn(),
   explainFinding: vi.fn(),
-  buildAnthropicMessages: vi.fn(),
+  buildMessages: vi.fn(),
+  createProvider: vi.fn(),
 }));
 // Partial mock: the parser's codegraph module needs the real execFile.
 vi.mock("node:child_process", async (importOriginal) => {

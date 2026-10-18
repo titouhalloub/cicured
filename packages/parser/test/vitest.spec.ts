@@ -15,7 +15,7 @@ describe("parseVitest", () => {
   it("parses many findings with correct files and test names", () => {
     const findings = parseVitest(fixture("vitest-many.txt"), "");
 
-    expect(findings).toHaveLength(3);
+    expect(findings).toHaveLength(4);
     expect(findings.every((f) => f.category === "test")).toBe(true);
     expect(findings.every((f) => f.severity === "error")).toBe(true);
 

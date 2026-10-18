@@ -262,8 +262,9 @@ function runTask(task, timeoutMs) {
         exitCode, timedOut, skipped: (spawnError || exitCode === 127), truncated, durationMs,
         stdout: out.slice(-TAIL_CHARS), stderr: (spawnError ? `${spawnError.message}\n` : "") + err.slice(-TAIL_CHARS)
       };
-      console.log(`[sft-dev] ${result.success ? "✔" : "✖"} ${task.name} (${durationMs}ms)` +
-        (timedOut ? " — TIMEOUT" : "") + (exitCode ? ` — exit ${exitCode}` : ""));
+      const icon = result.skipped ? "⊘" : (result.success ? "✔" : "✖");
+      const status = result.skipped ? " — skipped" : ((timedOut ? " — TIMEOUT" : "") + (exitCode ? ` — exit ${exitCode}` : ""));
+      console.log(`[sft-dev] ${icon} ${task.name} (${durationMs}ms)${status}`);
       resolve(result);
     };
     child.on("error", e => finish(null, null, e));

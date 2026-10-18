@@ -331,7 +331,7 @@ async function main() {
   }
 
   const report = writeReport();
-  console.log(`\n[sft-dev] ── SUMMARY: ${report.summary.passed}/${report.summary.total} passed` +
+  console.log(`\n[sft-dev] ── SUMMARY: ${report.summary.passed}/${report.summary.passed + report.summary.failed} passed` +
     (report.summary.skipped ? `, ${report.summary.skipped} skipped` : "") + " ──");
   for (const r of results) console.log(`  ${r.skipped ? "○" : r.success ? "✔" : "✖"} ${r.name}`);
 

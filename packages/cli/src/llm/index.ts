@@ -53,7 +53,7 @@ function stripFences(text: string): string {
 export async function suggestFix(
   provider: LlmProvider,
   input: SuggestInput,
-): Promise<LlmSuggestion> {
+): Promise<{ suggestion: LlmSuggestion; response: import("./types").LlmResponse }> {
   const { system, user } = buildMessages(input, "suggest");
   const response = await provider.complete({
     system,
@@ -78,7 +78,7 @@ export async function suggestFix(
   }
 
   validateFilesTouched(parsed.data.filesTouched, input);
-  return parsed.data;
+  return { suggestion: parsed.data, response };
 }
 
 export async function explainFinding(

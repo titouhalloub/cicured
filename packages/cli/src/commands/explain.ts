@@ -2,7 +2,14 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import * as schemas from "@sft/schemas";
 import { blastRadiusFor, buildCodeGraph, parseReport } from "@sft/parser";
-import { createProvider, explainFinding, type SuggestInput } from "../llm";
+import {
+  buildMessages,
+  computeCostUsd,
+  createProvider,
+  explainFinding,
+  type SuggestInput,
+} from "../llm";
+import { appendLlmCall } from "../storage/ledger";
 import { snippetFor } from "../snippet";
 import { banner } from "../ui";
 
@@ -56,7 +63,14 @@ export async function explainCommand(args: string[]): Promise<number> {
 
   try {
     const provider = createProvider();
-    const explanation = await explainFinding(provider, input);
+    const { system, user } = buildMessages(input, "explain");
+    const response = await provider.complete({
+      system,
+      user,
+      maxTokens: 800,
+      temperature: 0.2,
+    });
+    const explanation = response.text;
     process.stdout.write(`${explanation}\n\n`);
     process.stdout.write(`${banner("Context")}\n`);
     process.stdout.write(`File: ${finding.file}:${finding.line}:${finding.col}\n`);
@@ -66,9 +80,21 @@ export async function explainCommand(args: string[]): Promise<number> {
         `Callees: ${neighborhood?.callees.length ?? 0}   ` +
         `Tests: ${neighborhood?.tests.length ?? 0}\n`,
     );
+    appendLlmCall({
+      provider: response.provider,
+      model: response.model,
+      endpoint: response.endpoint,
+      mode: "explain",
+      usage: response.usage,
+      pricing: provider.pricing,
+      totalCostUsd: computeCostUsd(response.usage, provider.pricing),
+      durationMs: response.durationMs,
+    });
     return 0;
   } catch (error) {
     process.stderr.write(`explain failed: ${String(error)}\n`);
     return 1;
   }
 }
+
+

@@ -7,8 +7,19 @@ import path from "node:path";
 // and no exports map, so Node's native ESM loader (via tsx) reads it as CJS
 // and cjs-module-lexer cannot statically resolve the barrel `export *` chain.
 import * as schemas from "@sft/schemas";
-import { blastRadiusFor, buildCodeGraph, parseReport } from "@sft/parser";
-import { createProvider, suggestFix, type LlmSuggestion, type SuggestInput } from "../llm";
+import {
+  blastRadiusFor,
+  buildCodeGraph,
+  parseReport,
+} from "@sft/parser";
+import {
+  buildMessages,
+  computeCostUsd,
+  createProvider,
+  type LlmSuggestion,
+  type SuggestInput,
+} from "../llm";
+import { appendLlmCall } from "../storage/ledger";
 import { snippetFor } from "../snippet";
 import { banner } from "../ui";
 
@@ -113,9 +124,22 @@ export async function fixCommand(args: string[]): Promise<number> {
   };
 
   let suggestion: LlmSuggestion;
+  let llmResponse: import("../llm/types").LlmResponse;
   try {
     const provider = createProvider();
-    suggestion = await suggestFix(provider, input);
+    const result = await suggestFix(provider, input);
+    suggestion = result.suggestion;
+    llmResponse = result.response;
+    appendLlmCall({
+      provider: llmResponse.provider,
+      model: llmResponse.model,
+      endpoint: llmResponse.endpoint,
+      mode: "fix",
+      usage: llmResponse.usage,
+      pricing: provider.pricing,
+      totalCostUsd: computeCostUsd(llmResponse.usage, provider.pricing),
+      durationMs: llmResponse.durationMs,
+    });
   } catch (error) {
     process.stderr.write(`suggest failed: ${String(error)}\n`);
     return 1;

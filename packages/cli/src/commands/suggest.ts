@@ -6,7 +6,8 @@ import path from "node:path";
 // A namespace import exposes the detected exports at runtime.
 import * as schemas from "@sft/schemas";
 import type { SftReportV2 } from "@sft/schemas";
-import { createProvider, suggestFix } from "../llm";
+import { computeCostUsd, createProvider, suggestFix } from "../llm";
+import { appendLlmCall } from "../storage/ledger";
 import { banner, fail } from "../ui";
 
 /** Hard cap on the failure output forwarded to the model. */
@@ -61,7 +62,7 @@ export async function suggestCommand(_args: string[]): Promise<number> {
 
   try {
     const provider = createProvider();
-    const suggestion = await suggestFix(
+    const result = await suggestFix(
       provider,
       {
         ruleId: "unknown",
@@ -72,6 +73,18 @@ export async function suggestCommand(_args: string[]): Promise<number> {
         snippet: "",
       },
     );
+    const suggestion = result.suggestion;
+    const llmResponse = result.response;
+    appendLlmCall({
+      provider: llmResponse.provider,
+      model: llmResponse.model,
+      endpoint: llmResponse.endpoint,
+      mode: "suggest",
+      usage: llmResponse.usage,
+      pricing: provider.pricing,
+      totalCostUsd: computeCostUsd(llmResponse.usage, provider.pricing),
+      durationMs: llmResponse.durationMs,
+    });
     process.stdout.write(`${suggestion.explanation}\n\n${suggestion.patchDiff}\n`);
     return 0;
   } catch (error) {
@@ -79,3 +92,4 @@ export async function suggestCommand(_args: string[]): Promise<number> {
     return 1;
   }
 }
+

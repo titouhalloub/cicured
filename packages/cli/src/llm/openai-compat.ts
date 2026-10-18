@@ -1,4 +1,4 @@
-import type { LlmProviderId } from "@cicured/schemas";
+import type { LlmProviderId } from "@sft/schemas";
 import type { LlmProvider, LlmRequest, LlmResponse, ProviderConfig } from "./types";
 import { buildMessages } from "./prompt";
 import { lookupPricing, computeCostUsd } from "./pricing";
@@ -33,7 +33,7 @@ interface OpenAiResponse {
 export class OpenAiCompatProvider implements LlmProvider {
   readonly providerId: LlmProviderId;
   readonly model: string;
-  readonly pricing: import("@cicured/schemas").ModelPricing;
+  readonly pricing: import("@sft/schemas").ModelPricing;
   readonly baseUrl: string;
   readonly apiKey: string;
 

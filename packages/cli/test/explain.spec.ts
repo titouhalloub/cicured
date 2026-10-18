@@ -7,10 +7,12 @@ vi.mock("../src/llm", () => ({
   explainFinding: vi.fn(),
   suggestFix: vi.fn(),
   buildMessages: vi.fn(),
-  createProvider: vi.fn(),
+  createProvider: vi.fn(() => {
+    throw new Error("No LLM provider configured. Set ANTHROPIC_API_KEY.");
+  }),
 }));
 
-import { explainFinding } from "../src/llm";
+import { explainFinding, createProvider } from "../src/llm";
 import { explainCommand } from "../src/commands/explain";
 
 const REPORT = {
@@ -91,6 +93,12 @@ describe("explainCommand", () => {
   it("returns 0 and prints something when the LLM stub returns text", async () => {
     writeReport();
     process.env.ANTHROPIC_API_KEY = "test-key";
+    vi.mocked(createProvider).mockReturnValue({
+      providerId: "anthropic",
+      model: "claude-sonnet-4-5",
+      pricing: { inputPerM: 3, outputPerM: 15 },
+      complete: vi.fn(),
+    } as never);
     vi.mocked(explainFinding).mockResolvedValue(
       "This finding means the property is missing.",
     );

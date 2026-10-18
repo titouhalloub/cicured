@@ -1,4 +1,4 @@
-import type { LlmProviderId, LlmUsage, ModelPricing } from "@cicured/schemas";
+import type { LlmProviderId, LlmUsage, ModelPricing } from "@sft/schemas";
 
 export interface LlmRequest {
   system: string;

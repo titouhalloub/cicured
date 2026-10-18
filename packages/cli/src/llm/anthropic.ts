@@ -1,4 +1,4 @@
-import type { LlmProviderId } from "@cicured/schemas";
+import type { LlmProviderId } from "@sft/schemas";
 import { z } from "zod";
 import type { LlmProvider, LlmRequest, LlmResponse, ProviderConfig } from "./types";
 import { buildMessages, type SuggestInput, validateFilesTouched } from "./prompt";
@@ -54,7 +54,7 @@ const LlmSuggestionSchema = z.object({
 export class AnthropicProvider implements LlmProvider {
   readonly providerId: LlmProviderId = "anthropic";
   readonly model: string;
-  readonly pricing: import("@cicured/schemas").ModelPricing;
+  readonly pricing: import("@sft/schemas").ModelPricing;
 
   constructor(private cfg: ProviderConfig) {
     this.model = cfg.model;
@@ -119,52 +119,4 @@ export async function callAnthropic(
   return provider.complete(req);
 }
 
-export async function suggestFix(
-  provider: AnthropicProvider,
-  input: SuggestInput,
-): Promise<{
-  patchDiff: string;
-  explanation: string;
-  confidence: number;
-  filesTouched: string[];
-}> {
-  const { system, user } = buildMessages(input, "suggest");
-  const response = await provider.complete({
-    system,
-    user,
-    maxTokens: 2000,
-    temperature: 0.2,
-  });
 
-  const text = stripFences(response.text);
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error("anthropic did not return valid JSON");
-  }
-
-  const parsed = LlmSuggestionSchema.safeParse(json);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    const where = issue && issue.path.length > 0 ? issue.path.join(".") : "<root>";
-    throw new Error(`anthropic JSON did not match the expected shape (${where}: ${issue?.message ?? "invalid"})`);
-  }
-
-  validateFilesTouched(parsed.data.filesTouched, input);
-  return parsed.data;
-}
-
-export async function explainFinding(
-  provider: AnthropicProvider,
-  input: SuggestInput,
-): Promise<string> {
-  const { system, user } = buildMessages(input, "explain");
-  const response = await provider.complete({
-    system,
-    user,
-    maxTokens: 800,
-    temperature: 0.2,
-  });
-  return response.text;
-}

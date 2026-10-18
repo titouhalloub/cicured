@@ -3,11 +3,12 @@ import { z } from "zod";
 import { AnthropicProvider } from "./anthropic";
 import { OpenAiCompatProvider } from "./openai-compat";
 import { detectProvider } from "./detect";
-import { buildMessages, type SuggestInput } from "./prompt";
+import { buildMessages, type SuggestInput , validateFilesTouched} from "./prompt";
 import { lookupPricing, computeCostUsd, DEFAULT_PRICING } from "./pricing";
 
 export { detectProvider, buildMessages };
-export type { LlmProvider, LlmRequest, LlmResponse, ProviderConfig, SuggestInput } from "./types";
+export type { LlmProvider, LlmRequest, LlmResponse, ProviderConfig } from "./types";
+export type { SuggestInput } from "./prompt";
 export { lookupPricing, computeCostUsd, DEFAULT_PRICING } from "./pricing";
 
 export function createProvider(cfg?: ProviderConfig): LlmProvider {
@@ -76,6 +77,7 @@ export async function suggestFix(
     throw new Error(`LLM JSON did not match the expected shape (${where}: ${issue?.message ?? "invalid"})`);
   }
 
+  validateFilesTouched(parsed.data.filesTouched, input);
   return parsed.data;
 }
 

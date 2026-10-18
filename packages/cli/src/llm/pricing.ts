@@ -1,4 +1,4 @@
-import type { ModelPricing } from "@cicured/schemas";
+import type { ModelPricing } from "@sft/schemas";
 
 export const DEFAULT_PRICING: Record<string, ModelPricing> = {
   "claude-sonnet-4-5":  { inputPerM: 3.00,  outputPerM: 15.00 },

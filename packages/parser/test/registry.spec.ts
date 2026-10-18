@@ -50,10 +50,10 @@ describe("parser registry", () => {
     expect(parseTask(task({ name: "Not a Real Task", stdout: "anything", exitCode: 0 }))).toEqual([]);
   });
 
-  it("PARSERS.jest and PARSERS.vitest resolve to the same parse function", () => {
-    // parseJest handles both the jest and vitest summary formats, so the
-    // registry deliberately shares one implementation between the two ids.
-    expect(PARSERS["jest"]!.parse).toBe(PARSERS["vitest"]!.parse);
+  it("PARSERS.vitest resolves to parseVitest, distinct from PARSERS.jest", () => {
+    // vitest now has its own dedicated parser; it no longer shares parseJest.
+    expect(PARSERS["vitest"]!.parse).not.toBe(PARSERS["jest"]!.parse);
+    expect(PARSERS["vitest"]!.id).toBe("vitest");
   });
 
   it("TASK_NAME_TO_PARSER maps Go task names", () => {

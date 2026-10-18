@@ -15,6 +15,7 @@ export { parseGoVet } from "./parsers/go-vet";
 export { parseSemgrep } from "./parsers/semgrep";
 export { parseCargoClippy } from "./parsers/cargo-clippy";
 export { parseCargoTest } from "./parsers/cargo-test";
+export { parseVitest } from "./parsers/vitest";
 export { parseJson } from "./parsers/json";
 export { parseTask } from "./parsers/index";
 export type { Parser } from "./parsers/registry";

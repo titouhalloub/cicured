@@ -1,0 +1,18 @@
+  ❯ test/auth.spec.ts (3 tests | 2 failed)
+   × rejects expired token
+    → expected 'invalid' to be 'expired'
+   × accepts refresh token
+    → expected 401 to be 200
+   ✓ lists users
+
+  ❯ test/users.spec.ts (2 tests | 1 failed)
+   × users › rejects expired token
+
+    expect(received).toBe(expected)
+
+   × users › renders profile
+    Expected: "active"
+    Received: "inactive"
+
+Test Files: 2 failed (2)
+Tests: 3 failed (3)

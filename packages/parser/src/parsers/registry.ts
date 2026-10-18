@@ -10,6 +10,7 @@ import { parsePytest } from "./pytest";
 import { parseRuff } from "./ruff";
 import { parseSemgrep } from "./semgrep";
 import { parseTsc } from "./tsc";
+import { parseVitest } from "./vitest";
 
 /**
  * A parser turns raw task output into structured findings.
@@ -40,9 +41,9 @@ export const PARSERS: Record<string, Parser> = {
   tsc: { id: "tsc", parse: parseTsc },
   eslint: { id: "eslint", parse: parseEslint },
   jest: { id: "jest", parse: parseJest },
-  // vitest shares the jest parser: jest.ts already understands both the jest
-  // (`FAIL` + `●`) and vitest (`❯` + `×`) summary formats.
-  vitest: { id: "vitest", parse: parseJest },
+  // vitest has a dedicated parser (parseVitest) that understands both raw
+  // vitest output (❯ + ×) and pnpm-prefixed output.
+  vitest: { id: "vitest", parse: parseVitest },
   pytest: { id: "pytest", parse: parsePytest },
   ruff: { id: "ruff", parse: parseRuff },
   "go-test": { id: "go-test", parse: parseGoTest },

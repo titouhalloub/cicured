@@ -1,0 +1,7 @@
+  ✓ test/auth.spec.ts (3 tests | 0 failed)
+   ✓ rejects expired token
+   ✓ accepts refresh token
+   ✓ lists users
+
+Test Files: 1 passed (1)
+Tests: 3 passed (3)

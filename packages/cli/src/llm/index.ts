@@ -84,7 +84,7 @@ export async function suggestFix(
 export async function explainFinding(
   provider: LlmProvider,
   input: SuggestInput,
-): Promise<string> {
+): Promise<{ text: string; response: import("./types").LlmResponse }> {
   const { system, user } = buildMessages(input, "explain");
   const response = await provider.complete({
     system,
@@ -92,5 +92,5 @@ export async function explainFinding(
     maxTokens: 800,
     temperature: 0.2,
   });
-  return response.text;
+  return { text: response.text, response };
 }

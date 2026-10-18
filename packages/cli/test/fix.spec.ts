@@ -12,6 +12,7 @@ vi.mock("../src/llm", () => ({
   explainFinding: vi.fn(),
   buildMessages: vi.fn(),
   createProvider: vi.fn(),
+  computeCostUsd: vi.fn(() => 0.01),
 }));
 // Partial mock: the parser's codegraph module needs the real execFile.
 vi.mock("node:child_process", async (importOriginal) => {
@@ -19,7 +20,7 @@ vi.mock("node:child_process", async (importOriginal) => {
   return { ...actual, spawn: vi.fn() };
 });
 
-import { suggestFix } from "../src/llm";
+import { suggestFix, createProvider } from "../src/llm";
 import { fixCommand } from "../src/commands/fix";
 
 const REPORT = {
@@ -71,6 +72,12 @@ beforeEach(() => {
   delete process.env.ANTHROPIC_API_KEY;
   vi.mocked(spawn).mockReset();
   vi.mocked(suggestFix).mockReset();
+  vi.mocked(createProvider).mockReturnValue({
+    pricing: { inputPerM: 3, outputPerM: 15 },
+    providerId: 'anthropic',
+    model: 'claude',
+    complete: vi.fn(),
+  } as never);
 });
 
 afterEach(() => {
@@ -87,10 +94,19 @@ function writeReport(): void {
 
 function stubSuggestion(patchDiff: string): void {
   vi.mocked(suggestFix).mockResolvedValue({
-    patchDiff,
-    explanation: "Do the thing.",
-    confidence: 0.9,
-    filesTouched: ["src/auth.ts"],
+    suggestion: {
+      patchDiff,
+      explanation: "Do the thing.",
+      confidence: 0.9,
+      filesTouched: ["src/auth.ts"],
+    },
+    response: {
+      text: "",
+      usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 0, cacheCreationTokens: 0, source: "reported" },
+      model: "claude",
+      provider: "anthropic",
+      durationMs: 100,
+    },
   });
 }
 

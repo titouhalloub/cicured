@@ -3,7 +3,6 @@ import path from "node:path";
 import * as schemas from "@sft/schemas";
 import { blastRadiusFor, buildCodeGraph, parseReport } from "@sft/parser";
 import {
-  buildMessages,
   computeCostUsd,
   createProvider,
   explainFinding,
@@ -63,14 +62,7 @@ export async function explainCommand(args: string[]): Promise<number> {
 
   try {
     const provider = createProvider();
-    const { system, user } = buildMessages(input, "explain");
-    const response = await provider.complete({
-      system,
-      user,
-      maxTokens: 800,
-      temperature: 0.2,
-    });
-    const explanation = response.text;
+    const { text: explanation, response } = await explainFinding(provider, input);
     process.stdout.write(`${explanation}\n\n`);
     process.stdout.write(`${banner("Context")}\n`);
     process.stdout.write(`File: ${finding.file}:${finding.line}:${finding.col}\n`);

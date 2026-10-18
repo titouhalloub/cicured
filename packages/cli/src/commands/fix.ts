@@ -16,6 +16,7 @@ import {
   buildMessages,
   computeCostUsd,
   createProvider,
+  suggestFix,
   type LlmSuggestion,
   type SuggestInput,
 } from "../llm";

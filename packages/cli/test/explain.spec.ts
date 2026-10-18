@@ -10,6 +10,7 @@ vi.mock("../src/llm", () => ({
   createProvider: vi.fn(() => {
     throw new Error("No LLM provider configured. Set ANTHROPIC_API_KEY.");
   }),
+  computeCostUsd: vi.fn(() => 0.01),
 }));
 
 import { explainFinding, createProvider } from "../src/llm";
@@ -99,9 +100,17 @@ describe("explainCommand", () => {
       pricing: { inputPerM: 3, outputPerM: 15 },
       complete: vi.fn(),
     } as never);
-    vi.mocked(explainFinding).mockResolvedValue(
-      "This finding means the property is missing.",
-    );
+
+    vi.mocked(explainFinding).mockResolvedValue({
+      text: "This finding means the property is missing.",
+      response: {
+        text: "This finding means the property is missing.",
+        usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 0, cacheCreationTokens: 0, source: "reported" },
+        model: "claude-sonnet-4-5",
+        provider: "anthropic",
+        durationMs: 100,
+      },
+    });
 
     expect(await explainCommand(["1"])).toBe(0);
     expect(stdout.join("")).toContain("This finding means the property is missing.");

@@ -118,7 +118,7 @@ describe("suggestFix filesTouched validation", () => {
       durationMs: 100,
     });
     await expect(suggestFix(MOCK_PROVIDER, INPUT)).resolves.toMatchObject({
-      filesTouched: ["src/auth.ts"],
+      suggestion: { filesTouched: ["src/auth.ts"] },
     });
   });
 
@@ -136,7 +136,7 @@ describe("suggestFix filesTouched validation", () => {
       durationMs: 100,
     });
     await expect(suggestFix(MOCK_PROVIDER, INPUT)).resolves.toMatchObject({
-      patchDiff: expect.stringContaining("@@"),
+      suggestion: { patchDiff: expect.stringContaining("@@") },
     });
   });
 
@@ -155,7 +155,7 @@ describe("suggestFix filesTouched validation", () => {
     });
     await expect(
       suggestFix(MOCK_PROVIDER, { ...INPUT, neighborhood: null }),
-    ).resolves.toMatchObject({ filesTouched: ["anywhere/at/all.ts"] });
+    ).resolves.toMatchObject({ suggestion: { filesTouched: ["anywhere/at/all.ts"] } });
   });
 });
 

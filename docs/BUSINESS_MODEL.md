@@ -1,6 +1,3 @@
-Here's the document. Paste it into `docs/BUSINESS_MODEL.md` on the VM.
-
-```markdown
 # Cicured Business Model
 
 **Status:** strategic anchor, pre-launch

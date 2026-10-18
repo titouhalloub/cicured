@@ -160,7 +160,7 @@ describe("createSandboxContainer (Spec §8 hardening)", () => {
     expect(host.ReadonlyRootfs).toBe(true);
     expect(host.CapDrop).toEqual(["ALL"]);
     expect(host.SecurityOpt).toEqual(["no-new-privileges"]);
-    expect(host.Memory).toBe(4 * 1024 * 1024 * 1024);
+    expect(host.Memory).toBe(8 * 1024 * 1024 * 1024);
     expect(host.NanoCpus).toBe(2_000_000_000);
     // Container lifetime is explicit: the worker removes it in a finally block.
     expect(host.AutoRemove).toBe(false);

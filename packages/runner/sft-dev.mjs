@@ -258,8 +258,8 @@ function runTask(task, timeoutMs) {
       const exitCode = timedOut ? 124 : (typeof code === "number" ? code : (spawnError ? 127 : 1));
       const result = {
         name: task.name, command: task.command, ...parserFieldsOf(task),
-        success: !timedOut && !spawnError && code === 0,
-        exitCode, timedOut, skipped: false, truncated, durationMs,
+        success: !(spawnError || exitCode === 127) && !timedOut && code === 0,
+        exitCode, timedOut, skipped: (spawnError || exitCode === 127), truncated, durationMs,
         stdout: out.slice(-TAIL_CHARS), stderr: (spawnError ? `${spawnError.message}\n` : "") + err.slice(-TAIL_CHARS)
       };
       console.log(`[sft-dev] ${result.success ? "✔" : "✖"} ${task.name} (${durationMs}ms)` +

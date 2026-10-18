@@ -176,7 +176,7 @@ export async function runCommand(args: string[]): Promise<number> {
     process.stdout.write(`${mark} ${task.name} (${task.durationMs}ms)\n`);
   }
   process.stdout.write(
-    `SUMMARY: ${report.summary.passed}/${report.summary.total} passed\n`,
+    `SUMMARY: ${report.summary.passed}/${report.summary.passed + report.summary.failed} passed${report.summary.skipped > 0 ? `, ${report.summary.skipped} skipped` : ""}\n`,
   );
 
   if (findings === null) {

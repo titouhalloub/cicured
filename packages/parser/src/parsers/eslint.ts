@@ -23,9 +23,33 @@ function looksLikePath(line: string): boolean {
  * Parses eslint "stylish" output into findings. Never throws; obeys the M3a
  * contract (2 MB input cap, 500 findings, synthetic SFT_TRUNCATED marker).
  */
+/**
+ * pnpm -r prefixes every child-task output line with
+ *   `<package> <script>: <original>`
+ * and emits two kinds of framework lines we drop:
+ *   `<package> <script>$ <command>`  (header, before task runs)
+ *   `<package> <script>: Done`       (completion marker)
+ * Raw eslint output (no prefix) is preserved so the parser still
+ * works for direct `eslint .` invocations.
+ */
+function stripPnpmPrefix(raw: string): string {
+  const out: string[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    if (/^\S+\s+\S+\$\s+/.test(line)) continue;
+    if (/^\S+\s+\S+:\s+Done\s*$/.test(line)) continue;
+    const m = /^\S+\s+\S+: (.*)$/.exec(line);
+    if (m) {
+      out.push(m[1]);
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
 export function parseEslint(stdout: string, stderr: string): ParsedFinding[] {
   try {
-    const out = capInput(stdout ?? "");
+    const out = capInput(stripPnpmPrefix(stdout ?? ""));
     const err = capInput(stderr ?? "");
     const truncated = out.truncated || err.truncated;
     const limit = findingLimit(truncated);

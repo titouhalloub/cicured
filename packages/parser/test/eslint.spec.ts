@@ -52,4 +52,33 @@ describe("parseEslint", () => {
       message: "Parsing error: Expected corresponding JSX closing tag for <div>",
     });
   });
+
+  it("strips pnpm -r prefix and extracts findings", () => {
+    const raw = [
+      "packages/cli lint$ eslint .",
+      "packages/cli lint: /workspace/repo/packages/cli/src/llm/anthropic.ts",
+      "packages/cli lint:   4:10  error  'buildMessages' is defined but never used  @typescript-eslint/no-unused-vars",
+      "packages/cli lint:   5:10  error  'lookupPricing' is defined but never used  @typescript-eslint/no-unused-vars",
+      "packages/cli lint: Done",
+    ].join("\n");
+    const findings = parseEslint(raw, "");
+    expect(findings).toHaveLength(2);
+    expect(findings[0].file).toContain("anthropic.ts");
+    expect(findings[0].line).toBe(4);
+    expect(findings[0].col).toBe(10);
+    expect(findings[0].ruleId).toBe("@typescript-eslint/no-unused-vars");
+    expect(findings[1].line).toBe(5);
+  });
+
+  it("still parses raw eslint output without pnpm prefix", () => {
+    const raw = [
+      "/workspace/repo/src/foo.ts",
+      "  1:5  error  'x' is defined but never used  no-unused-vars",
+    ].join("\n");
+    const findings = parseEslint(raw, "");
+    expect(findings).toHaveLength(1);
+    expect(findings[0].file).toBe("src/foo.ts");
+    expect(findings[0].line).toBe(1);
+    expect(findings[0].col).toBe(5);
+  });
 });

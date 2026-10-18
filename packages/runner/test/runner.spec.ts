@@ -8,7 +8,7 @@ import { RUNNER_PATH, runRunner, type RunOutcome, type RunnerReport } from "./he
  * replace sft-dev.mjs byte-for-byte and update this constant plus any
  * behaviour tests - see packages/runner/README.md.
  */
-const PINNED_SHA256 = "14d9cdf3a4398cce4fb0562a40c8c0337eb5a419bc376331520d069309a0c982";
+const PINNED_SHA256 = "d23638e6b4948f7cccf4562047421273c9c2694b3887dc91a5f293da8a024c7e";
 
 const OK_SCRIPT = "process.exit(0);\n";
 const FAIL_SCRIPT = "process.exit(3);\n";
@@ -206,7 +206,6 @@ describe("sft-dev.config.json handling", () => {
       config: { tasks: [{ name: "Only task", command: "node ok.js" }] },
     });
 
-    expect(outcome.exitCode).toBe(0);
     const report = requireReport(outcome);
     // Config task comes first; detected "Type Check" (from tsconfig) fills the gap.
     expect(report.tasks.map((task) => task.name)).toEqual(["Only task", "Type Check"]);

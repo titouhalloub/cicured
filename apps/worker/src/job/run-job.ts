@@ -368,7 +368,7 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       await stopLogs();
       if (handle) {
         try {
-          // await handle.remove();
+          await handle.remove();
         } catch (error) {
           logger.error("could not remove the sandbox container", error);
         }

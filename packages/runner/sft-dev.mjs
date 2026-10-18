@@ -177,30 +177,48 @@ const parserFieldsOf = (task) =>
   task.parser ? { parser: task.parser, parserConfig: task.parserConfig } : {};
 
 function loadConfig() {
-  const cfgPath = "sft-dev.config.json";
-  if (existsSync(cfgPath)) {
-    try {
-      const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
-      if (Array.isArray(cfg.tasks) && cfg.tasks.length) {
-        const valid = cfg.tasks.filter(t => t && typeof t.name === "string" && typeof t.command === "string" && t.command.trim());
-        if (valid.length !== cfg.tasks.length) warnings.push(`sft-dev.config.json: ${cfg.tasks.length - valid.length} invalid task(s) ignored`);
-        // Phase 3e: a config task may pin a registry parser id + free-form
-        // config. Drop them unless the id is a non-empty string, otherwise the
-        // report would fail SftTaskV2 (parser: z.string().min(1)).
-        for (const task of valid) {
-          if (task.parser !== undefined && (typeof task.parser !== "string" || !task.parser)) delete task.parser;
-          if (task.parser === undefined) delete task.parserConfig;
-        }
-        if (valid.length) return valid;
-        warnings.push("sft-dev.config.json: no valid tasks, falling back to auto-detection");
-      }
-    } catch (e) {
-      warnings.push(`sft-dev.config.json invalid: ${e.message}`);
-    }
+  const tasks = mergeConfig(detectTasks());
+  if (!tasks.length) {
+    warnings.push("no tasks detected (no tsconfig, eslint config, build/test script)");
   }
-  const detected = detectTasks();
-  if (!detected.length) warnings.push("no tasks detected (no tsconfig, eslint config, build/test script)");
-  return detected;
+  return tasks;
+}
+
+function mergeConfig(detected) {
+  const cfgPath = "sft-dev.config.json";
+  let cfg;
+  try {
+    cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
+  } catch (e) {
+    if (e.code === "ENOENT") return detected;
+    warnings.push(`sft-dev.config.json invalid: ${e.message}`);
+    return detected;
+  }
+
+  if (!Array.isArray(cfg.tasks)) {
+    warnings.push("sft-dev.config.json: no tasks array, falling back to auto-detection");
+    return detected;
+  }
+
+  const valid = cfg.tasks.filter(
+    (t) => t && typeof t.name === "string" && typeof t.command === "string" && t.command.trim()
+  );
+  if (valid.length !== cfg.tasks.length) {
+    warnings.push(`sft-dev.config.json: ${cfg.tasks.length - valid.length} invalid task(s) ignored`);
+  }
+  if (valid.length === 0) {
+    warnings.push("sft-dev.config.json: no valid tasks, falling back to auto-detection");
+    return detected;
+  }
+
+  for (const task of valid) {
+    if (task.parser !== undefined && (typeof task.parser !== "string" || !task.parser)) delete task.parser;
+    if (task.parser === undefined) delete task.parserConfig;
+  }
+
+  const configTasks = valid.map((t) => ({ ...t, ...parserFieldsOf(t) }));
+  const claimed = new Set(configTasks.map((t) => t.name));
+  return [...configTasks, ...detected.filter((t) => !claimed.has(t.name))];
 }
 
 // ── 4. Task execution (streams live, captures tails, kills process group) ──

@@ -208,8 +208,36 @@ describe("sft-dev.config.json handling", () => {
 
     expect(outcome.exitCode).toBe(0);
     const report = requireReport(outcome);
-    expect(report.tasks.map((task) => task.name)).toEqual(["Only task"]);
+    // Config task comes first; detected "Type Check" (from tsconfig) fills the gap.
+    expect(report.tasks.map((task) => task.name)).toEqual(["Only task", "Type Check"]);
     expect(report.warnings).toEqual([]);
+  });
+
+  it("merges config tasks with detected tasks", async () => {
+    const outcome = await runRunner({
+      packageJson: { name: "fixture", version: "1.0.0", scripts: { test: "echo ok" } },
+      config: { tasks: [{ name: "Custom Check", command: "echo ok" }] },
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    const report = requireReport(outcome);
+    const names = report.tasks.map((t) => t.name);
+    expect(names).toContain("Custom Check");
+    expect(names).toContain("Tests");
+    expect(names.indexOf("Custom Check")).toBeLessThan(names.indexOf("Tests"));
+  });
+
+  it("config task with the same name overrides the detected one", async () => {
+    const outcome = await runRunner({
+      packageJson: { name: "fixture", version: "1.0.0", scripts: { test: "echo detected" } },
+      config: { tasks: [{ name: "Tests", command: "echo from-config" }] },
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    const report = requireReport(outcome);
+    const tests = report.tasks.filter((t) => t.name === "Tests");
+    expect(tests).toHaveLength(1);
+    expect(tests[0].command).toBe("echo from-config");
   });
 
   it("warns about malformed config JSON instead of crashing", async () => {

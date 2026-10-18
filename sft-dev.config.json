@@ -4,6 +4,9 @@
     { "name": "Lint",       "command": "pnpm -r lint" },
     { "name": "Build",      "command": "pnpm -r build" },
     { "name": "Tests",      "command": "pnpm -r test" },
-    { "name": "Security",   "command": "semgrep --config=/opt/sft/semgrep-rules.yaml --json --no-git-ignore --quiet --metrics=off" }
+    { "name": "Security",   "command": "semgrep --config=/opt/sft/semgrep-rules.yaml --json --no-git-ignore --quiet --metrics=off" },
+    { "name": "Python Tests", "command": "python3 -m pytest packages/parser/test/fixtures/pytest-fixture -v", "parser": "pytest" },
+    { "name": "Go Tests", "command": "sh -c 'cd packages/parser/test/fixtures/graph-fixture-go && go test -json ./...'", "parser": "go-test" },
+    { "name": "Rust Tests", "command": "sh -c 'cd packages/parser/test/fixtures/graph-fixture-rust && cargo test --no-fail-fast'", "parser": "cargo-test" }
   ]
 }

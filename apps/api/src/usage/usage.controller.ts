@@ -1,14 +1,16 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   Post,
   UseGuards,
 } from "@nestjs/common";
-import { LlmCallRecord } from "@sft/schemas";
+import { LlmCallRecord, UsageSummary } from "@sft/schemas";
 import { z } from "zod";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { DeviceTokenGuard } from "../auth/device-token.guard";
+import { SessionGuard } from "../auth/session.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import type { UserRow } from "../db";
 import { UsageService, type SyncLlmCall } from "./usage.service";
@@ -27,7 +29,6 @@ type SyncLlmCallsBody = z.infer<typeof SyncLlmCallsBody>;
 
 /** LLM usage ledger upload consumed by `sft sync` (open-core Phase 3). */
 @Controller("usage")
-@UseGuards(DeviceTokenGuard)
 export class UsageController {
   constructor(private readonly usageService: UsageService) {}
 
@@ -37,11 +38,23 @@ export class UsageController {
    * cookie (DeviceTokenGuard falls back to SessionGuard).
    */
   @Post("llm-calls")
+  @UseGuards(DeviceTokenGuard)
   @HttpCode(201)
   async recordLlmCalls(
     @CurrentUser() user: UserRow,
     @Body(new ZodValidationPipe(SyncLlmCallsBody)) body: SyncLlmCallsBody,
   ): Promise<{ inserted: number }> {
     return this.usageService.insertLlmCalls(user, body.records as SyncLlmCall[]);
+  }
+
+  /**
+   * GET /usage/summary — cost totals for the dashboard card.
+   * Session-only: browsers are the caller, so this guard sits on the route
+   * itself and a device bearer token is not accepted here.
+   */
+  @Get("summary")
+  @UseGuards(SessionGuard)
+  async getUsageSummary(@CurrentUser() user: UserRow): Promise<UsageSummary> {
+    return this.usageService.getSummary(user);
   }
 }

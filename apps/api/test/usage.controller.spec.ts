@@ -5,6 +5,7 @@ import type { AuthenticatedRequest } from "../src/auth/authenticated-request";
 import { DeviceTokenGuard } from "../src/auth/device-token.guard";
 import type { SessionGuard } from "../src/auth/session.guard";
 import type { Database, UserRow } from "../src/db";
+import { UsageController } from "../src/usage/usage.controller";
 import { UsageService, type SyncLlmCall } from "../src/usage/usage.service";
 import type { UsersService } from "../src/users/users.service";
 
@@ -189,5 +190,86 @@ describe("UsageService.insertLlmCalls", () => {
 
     await expect(service.insertLlmCalls(user, [])).resolves.toEqual({ inserted: 0 });
     expect(insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("UsageService.getSummary", () => {
+  interface SummaryDbRows {
+    totals: { totalCalls: number; totalCostUsd: string | null };
+    topModels: { model: string; calls: number; costUsd: string | null }[];
+  }
+
+  /**
+   * Drizzle select-chain stub for the two summary queries: the totals query
+   * ends at .where(), the grouped one at .limit(). Fields differ (only the
+   * grouped query selects `model`), so one stub can route both.
+   */
+  function makeSummaryDb(rows: SummaryDbRows): Database {
+    const select = vi.fn((fields: Record<string, unknown>) => {
+      if ("model" in fields) {
+        return {
+          from: () => ({
+            where: () => ({
+              groupBy: () => ({
+                orderBy: () => ({
+                  limit: async (n: number) => rows.topModels.slice(0, n),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      return { from: () => ({ where: async () => [rows.totals] }) };
+    });
+    return { select } as unknown as Database;
+  }
+
+  it("aggregates totals and coerces numeric-string sums to numbers", async () => {
+    const db = makeSummaryDb({
+      totals: { totalCalls: 2, totalCostUsd: "0.0007" },
+      topModels: [
+        { model: "claude-sonnet-4-5", calls: 1, costUsd: "0.000388" },
+        { model: "gpt-4o", calls: 1, costUsd: "0.000312" },
+      ],
+    });
+    const service = new UsageService(db);
+
+    await expect(service.getSummary(user)).resolves.toEqual({
+      totalCalls: 2,
+      totalCostUsd: 0.0007,
+      topModels: [
+        { model: "claude-sonnet-4-5", calls: 1, costUsd: 0.000388 },
+        { model: "gpt-4o", calls: 1, costUsd: 0.000312 },
+      ],
+    });
+  });
+
+  it("returns zeros and an empty list for a user with no calls", async () => {
+    const db = makeSummaryDb({
+      totals: { totalCalls: 0, totalCostUsd: null },
+      topModels: [],
+    });
+    const service = new UsageService(db);
+
+    await expect(service.getSummary(user)).resolves.toEqual({
+      totalCalls: 0,
+      totalCostUsd: 0,
+      topModels: [],
+    });
+  });
+});
+
+describe("UsageController.getUsageSummary", () => {
+  it("delegates to the service with the authenticated user", async () => {
+    const summary = {
+      totalCalls: 1,
+      totalCostUsd: 0.000312,
+      topModels: [{ model: "google/gemini-2.5-flash", calls: 1, costUsd: 0.000312 }],
+    };
+    const getSummary = vi.fn(async () => summary);
+    const controller = new UsageController({ getSummary } as unknown as UsageService);
+
+    await expect(controller.getUsageSummary(user)).resolves.toBe(summary);
+    expect(getSummary).toHaveBeenCalledWith(user);
   });
 });

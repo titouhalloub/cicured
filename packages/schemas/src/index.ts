@@ -45,5 +45,6 @@ export { LOG_CHUNK_MAX_BYTES, LogStream, LogChunk, LogEnd, LogEvent } from "./lo
 export { CodeGraphFunction, CodeGraphFile, CodeGraphWarning, CodeGraph } from "./codegraph";
 export { GithubPushPayloadSchema, WebhookDeliveryResultSchema } from "./webhook";
 export type { GithubPushPayload, WebhookDeliveryResult } from "./webhook";
+export { TopModelUsage, UsageSummary } from "./usage";
 export * from "./llm";
 

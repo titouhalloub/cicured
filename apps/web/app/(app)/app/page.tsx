@@ -36,11 +36,13 @@ export default function DashboardPage() {
   // Degrade to zero on error OR an empty ledger — this card never blocks or toasts.
   const usage = usageSummary && usageSummary.totalCalls > 0 ? usageSummary : null;
   const spendValue = usageLoading ? "—" : formatUsd(usage?.totalCostUsd ?? 0);
+  const savingsValue = usageLoading ? "—" : formatUsd(usage?.totalEstimatedSavingsUsd ?? 0);
   const spendCalls = usage?.totalCalls ?? 0;
   const spendSubtitle = usageLoading
     ? "—"
     : `${spendCalls} ${spendCalls === 1 ? "call" : "calls"} tracked`;
-  const topModel = usage?.topModels[0]?.model;
+  const netRoi = usage?.netRoi ?? 0;
+  const byCategory = usage?.byCategory ?? [];
   const runs: RunSummary[] = data?.runs ?? [];
 
   const now = Date.now();
@@ -100,21 +102,55 @@ export default function DashboardPage() {
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-primary/10 text-brand-primary">
             <DollarSign className="h-6 w-6" />
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm text-text-muted-light dark:text-text-muted-dark">
-              AI Spend
+              Economic Layer
             </p>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-medium">{spendValue}</span>
-            </div>
-            <p className="truncate text-xs text-text-muted-light dark:text-text-muted-dark">
-              {spendSubtitle}
-            </p>
-            {topModel ? (
-              <p className="truncate text-xs text-text-muted-light dark:text-text-muted-dark">
-                top: {topModel}
-              </p>
-            ) : null}
+            {usage || usageLoading ? (
+              <>
+                <div className="flex items-start gap-6">
+                  <div className="min-w-0">
+                    <p className="text-xs text-text-muted-light dark:text-text-muted-dark">
+                      Spend
+                    </p>
+                    <p className="text-3xl font-medium">{spendValue}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-text-muted-light dark:text-text-muted-dark">
+                      Estimated Savings
+                    </p>
+                    <p className="text-3xl font-medium text-green-500">{savingsValue}</p>
+                  </div>
+                </div>
+                <p className="truncate text-xs text-text-muted-light dark:text-text-muted-dark">
+                  {spendSubtitle}
+                </p>
+                {netRoi > 0 ? (
+                  <span className="mt-1 inline-block rounded-full bg-brand-primary/10 px-2 py-0.5 text-xs font-medium">
+                    Net ROI: {Math.round(netRoi)}×
+                  </span>
+                ) : null}
+                <ul className="mt-1 space-y-0.5">
+                  {byCategory.map((cat) => (
+                    <li
+                      key={cat.category}
+                      className="truncate text-xs text-text-muted-light dark:text-text-muted-dark"
+                    >
+                      {cat.category}: {formatUsd(cat.costUsd)}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-medium">{spendValue}</span>
+                </div>
+                <p className="truncate text-xs text-text-muted-light dark:text-text-muted-dark">
+                  {spendSubtitle}
+                </p>
+              </>
+            )}
           </div>
         </div>
       </section>

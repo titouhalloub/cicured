@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { UUID_PATTERN, UsageSummary, type LlmCallRecord } from "@sft/schemas";
-import { and, count, desc, eq, inArray, sql, sum } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, sql, sum } from "drizzle-orm";
 import { DRIZZLE, llmCalls, projects, runs, type Database, type UserRow } from "../db";
 
 /** How many models the cost dashboard card ranks by spend. */
@@ -59,14 +59,19 @@ export class UsageService {
   }
 
   /**
-   * Aggregates the caller's ledger for the cost dashboard card: totals plus the
-   * top models by spend. Postgres returns sum(numeric) as a string (and null
-   * for an empty set), so values are coerced before the shared schema gets the
-   * final say.
+   * Aggregates the caller's ledger for the Economic Layer dashboard card:
+   * spend totals, tokens avoided (→ savings/ROI at $15/M), top models by
+   * spend, and spend by finding category. Postgres returns sum() as a string
+   * (and null for an empty set), so values are coerced before the shared
+   * schema gets the final say.
    */
   async getSummary(user: UserRow): Promise<UsageSummary> {
     const [totals] = await this.db
-      .select({ totalCalls: count(), totalCostUsd: sum(llmCalls.totalCostUsd) })
+      .select({
+        totalCalls: count(),
+        totalCostUsd: sum(llmCalls.totalCostUsd),
+        tokensAvoided: sum(llmCalls.estimatedTokensAvoided),
+      })
       .from(llmCalls)
       .where(eq(llmCalls.userId, user.id));
 
@@ -78,9 +83,28 @@ export class UsageService {
       .orderBy(desc(sql`sum(${llmCalls.totalCostUsd})`))
       .limit(TOP_MODELS_LIMIT);
 
+    const byCategory = await this.db
+      .select({ category: llmCalls.category, calls: count(), costUsd: sum(llmCalls.totalCostUsd) })
+      .from(llmCalls)
+      .where(and(eq(llmCalls.userId, user.id), isNotNull(llmCalls.category)))
+      .groupBy(llmCalls.category);
+
+    const totalCostUsd = toUsdNumber(totals?.totalCostUsd);
+    const totalTokensAvoided = Number(totals?.tokensAvoided ?? 0);
+    const totalEstimatedSavingsUsd = (totalTokensAvoided / 1_000_000) * 15.0;
+    const netRoi = totalCostUsd > 0 ? totalEstimatedSavingsUsd / totalCostUsd : 0;
+
     return UsageSummary.parse({
       totalCalls: totals?.totalCalls ?? 0,
-      totalCostUsd: toUsdNumber(totals?.totalCostUsd),
+      totalCostUsd,
+      totalTokensAvoided,
+      totalEstimatedSavingsUsd,
+      netRoi,
+      byCategory: byCategory.map((row) => ({
+        category: row.category ?? "",
+        calls: row.calls,
+        costUsd: toUsdNumber(row.costUsd),
+      })),
       topModels: topModels.map((row) => ({
         model: row.model,
         calls: row.calls,

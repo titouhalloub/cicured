@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { LogEvent, type SessionUser } from "@sft/schemas";
-import { API_BASE, apiFetch } from "./api";
+import { API_BASE, apiFetch, getUsageSummary } from "./api";
 import type { FindingWithId, ProjectSummary, RunSummary, SuggestionWithId } from "./schemas";
 
 /** Shape of GET /projects/:id/runs (Spec §6). */
@@ -55,6 +55,20 @@ export async function fetchAllRuns(): Promise<{
 
 export function useAllRuns() {
   return useQuery({ queryKey: ["runs"], queryFn: fetchAllRuns });
+}
+
+/**
+ * GET /usage/summary — LLM spend for the AI Spend card. One minute of
+ * staleness: spend is aggregated from synced ledgers, not per-second data,
+ * and a single retry keeps an unauthenticated call from hammering the API.
+ */
+export function useUsageSummary() {
+  return useQuery({
+    queryKey: ["usage-summary"],
+    queryFn: getUsageSummary,
+    staleTime: 60_000,
+    retry: 1,
+  });
 }
 
 // ─── Run detail (M4b-2a) ────────────────────────────────────────────────────

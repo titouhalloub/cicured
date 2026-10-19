@@ -1,11 +1,11 @@
 "use client";
-import { ArrowRight, CheckCircle2, Clock, PlayCircle, Rocket, XCircle } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock, DollarSign, PlayCircle, Rocket, XCircle } from "lucide-react";
 import Link from "next/link";
 import type { RunSummary } from "@sft/schemas";
 import { EmptyState } from "@/components/empty-state";
 import { RunsTable } from "@/components/runs/runs-table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAllRuns } from "@/lib/queries";
+import { useAllRuns, useUsageSummary } from "@/lib/queries";
 
 interface StatCard {
   label: string;
@@ -24,8 +24,23 @@ const STATS: StatCard[] = [
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
+/** `$0.0003` under $1, `$1.24` at or above — and plain `$0.00` for no spend. */
+function formatUsd(amount: number): string {
+  if (amount === 0) return "$0.00";
+  return amount < 1 ? `$${amount.toFixed(4)}` : `$${amount.toFixed(2)}`;
+}
+
 export default function DashboardPage() {
   const { data, isLoading, isError } = useAllRuns();
+  const { data: usageSummary, isLoading: usageLoading } = useUsageSummary();
+  // Degrade to zero on error OR an empty ledger — this card never blocks or toasts.
+  const usage = usageSummary && usageSummary.totalCalls > 0 ? usageSummary : null;
+  const spendValue = usageLoading ? "—" : formatUsd(usage?.totalCostUsd ?? 0);
+  const spendCalls = usage?.totalCalls ?? 0;
+  const spendSubtitle = usageLoading
+    ? "—"
+    : `${spendCalls} ${spendCalls === 1 ? "call" : "calls"} tracked`;
+  const topModel = usage?.topModels[0]?.model;
   const runs: RunSummary[] = data?.runs ?? [];
 
   const now = Date.now();
@@ -81,6 +96,27 @@ export default function DashboardPage() {
             </div>
           );
         })}
+        <div className="card flex items-center gap-4">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-primary/10 text-brand-primary">
+            <DollarSign className="h-6 w-6" />
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm text-text-muted-light dark:text-text-muted-dark">
+              AI Spend
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-medium">{spendValue}</span>
+            </div>
+            <p className="truncate text-xs text-text-muted-light dark:text-text-muted-dark">
+              {spendSubtitle}
+            </p>
+            {topModel ? (
+              <p className="truncate text-xs text-text-muted-light dark:text-text-muted-dark">
+                top: {topModel}
+              </p>
+            ) : null}
+          </div>
+        </div>
       </section>
 
       <section className="card">

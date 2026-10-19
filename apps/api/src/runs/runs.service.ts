@@ -16,6 +16,7 @@ import { and, asc, count, desc, eq, gte, inArray, sum } from "drizzle-orm";
 import {
   DRIZZLE,
   findings,
+  llmCalls,
   projects,
   runs,
   suggestions,
@@ -26,6 +27,13 @@ import {
 } from "../db";
 import { ProjectsService } from "../projects/projects.service";
 import { RunsQueue } from "../queue/runs-queue.service";
+
+/**
+ * GET /runs/:id/findings wire row: the DB finding plus the summed LLM spend
+ * recorded against it (itemized fix cost). `costUsd` is coerced from Postgres
+ * sum(numeric) — a string, null when no ledger rows matched.
+ */
+export type FindingWithCost = FindingRow & { costUsd: number };
 
 /**
  * API wire shape for GET /runs/:id/suggestions. The DB row is wider than the
@@ -62,6 +70,13 @@ const PLAN_BUILD_MINUTES_PER_MONTH: Record<string, number> = {
   team: 3000,
   enterprise: 100000, // effectively unlimited
 };
+
+/** sum(numeric) arrives as a string, null when there were no rows to sum. */
+function usdToNumber(value: string | null): number {
+  if (!value) return 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 /** First instant of the current UTC calendar month. */
 function startOfUtcMonth(now: Date = new Date()): Date {
@@ -199,14 +214,40 @@ export class RunsService {
     return row;
   }
 
-  /** GET /runs/:id/findings — every finding for a run, worst first (Spec §5). */
-  async findingsForRun(user: UserRow, runId: string): Promise<FindingRow[]> {
+  /**
+   * GET /runs/:id/findings — every finding for a run, worst first (Spec §5),
+   * with the AI spend recorded against it (itemized fix cost).
+   *
+   * llm_calls links to findings by sha256 fingerprint (the CLI has no DB row
+   * id), scoped to the caller so a teammate's ledger never lands on this run's
+   * bill. groupBy(findings.id) is safe in Postgres: every other selected
+   * column functionally depends on the primary key.
+   */
+  async findingsForRun(user: UserRow, runId: string): Promise<FindingWithCost[]> {
     await this.getOwnedRun(user, runId);
-    return this.db
-      .select()
+    const rows = await this.db
+      .select({
+        id: findings.id,
+        runId: findings.runId,
+        severity: findings.severity,
+        category: findings.category,
+        ruleId: findings.ruleId,
+        file: findings.file,
+        line: findings.line,
+        col: findings.col,
+        message: findings.message,
+        fingerprint: findings.fingerprint,
+        costUsd: sum(llmCalls.totalCostUsd),
+      })
       .from(findings)
+      .leftJoin(
+        llmCalls,
+        and(eq(llmCalls.findingId, findings.fingerprint), eq(llmCalls.userId, user.id)),
+      )
       .where(eq(findings.runId, runId))
+      .groupBy(findings.id)
       .orderBy(desc(findings.severity), asc(findings.file), asc(findings.line));
+    return rows.map((row) => ({ ...row, costUsd: usdToNumber(row.costUsd) }));
   }
 
   /** GET /runs/:id/suggestions — suggestions joined through their findings. */

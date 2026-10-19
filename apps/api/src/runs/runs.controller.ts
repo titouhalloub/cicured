@@ -12,7 +12,6 @@ import {
 import {
   CreateRunInput,
   FeedbackInput,
-  type Finding,
   ListRunsQuery,
   type RunSummary,
 } from "@sft/schemas";
@@ -21,7 +20,7 @@ import { SessionGuard } from "../auth/session.guard";
 import { toRunSummary } from "../common/dto";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import type { UserRow } from "../db";
-import { RunsService, type SuggestionWithId } from "./runs.service";
+import { RunsService, type FindingWithCost, type SuggestionWithId } from "./runs.service";
 
 /** Run lifecycle endpoints (Spec §6). */
 @Controller()
@@ -69,7 +68,7 @@ export class RunsController {
   async getFindings(
     @CurrentUser() user: UserRow,
     @Param("id") runId: string,
-  ): Promise<Finding[]> {
+  ): Promise<FindingWithCost[]> {
     return this.runsService.findingsForRun(user, runId);
   }
 

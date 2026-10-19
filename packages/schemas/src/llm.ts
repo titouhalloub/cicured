@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SHA256_HEX_PATTERN } from "./common";
 
 export const LlmProviderId = z.enum([
   "anthropic",
@@ -40,5 +41,11 @@ export const LlmCallRecord = z.object({
   ruleId: z.string().optional(),
   category: z.string().optional(),
   estimatedTokensAvoided: z.number().int().nonnegative().optional(),
+  /**
+   * Finding the call was for (itemized cost per bug). The CLI has no DB row
+   * id, so this is the Spec §5 sha256 fingerprint — validated against the
+   * same pattern as `Finding.fingerprint`, not uuid (it never is one).
+   */
+  findingId: z.string().regex(SHA256_HEX_PATTERN, "findingId must be a sha256 fingerprint").optional(),
 });
 export type LlmCallRecord = z.infer<typeof LlmCallRecord>;

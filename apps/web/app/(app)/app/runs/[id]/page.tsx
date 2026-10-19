@@ -16,7 +16,7 @@ import { TaskTimeline } from "@/components/runs/task-timeline";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch } from "@/lib/api";
-import { formatDuration, shortSha } from "@/lib/format";
+import { formatDuration, formatUsd, shortSha } from "@/lib/format";
 import {
   useFindings,
   useProjects,
@@ -186,6 +186,7 @@ export default function RunDetailPage() {
   const findingsQuery = useFindings(runId, terminal);
   const suggestionsQuery = useSuggestions(runId, terminal);
   const findings = findingsQuery.data ?? [];
+  const totalCost = findings.reduce((sum, f) => sum + (f.costUsd || 0), 0);
 
   if (runQuery.isLoading) return <SkeletonPage />;
 
@@ -226,6 +227,11 @@ export default function RunDetailPage() {
       </Card>
 
       <Card title="Findings" icon={FileWarning}>
+        <div className="mb-3 flex justify-end">
+          <span className="badge-status rounded-full bg-black/5 px-2.5 py-1 text-xs text-text-muted-light dark:bg-white/10 dark:text-text-muted-dark">
+            Total AI Cost for this run: {formatUsd(totalCost)}
+          </span>
+        </div>
         <FindingsTable findings={findings} loading={findingsQuery.isLoading} />
       </Card>
 

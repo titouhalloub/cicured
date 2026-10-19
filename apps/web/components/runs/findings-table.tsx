@@ -5,14 +5,15 @@ import { FileWarning } from "lucide-react";
 import type { Finding, FindingSeverity } from "@sft/schemas";
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /**
  * The API row carries an `id`; the shared `Finding` schema does not. The
  * fingerprint is unique per run (`findings_run_fingerprint_uq`), so it is the
- * fallback key.
+ * fallback key. `costUsd` is the summed LLM spend for this finding.
  */
-type FindingRow = Finding & { id?: string };
+type FindingRow = Finding & { id?: string; costUsd?: number };
 
 const SEVERITY_DOT: Record<FindingSeverity, string> = {
   error: "bg-brand-error",
@@ -100,6 +101,7 @@ export function FindingsTable({ findings, loading }: { findings: FindingRow[]; l
                 <th className="pb-2 pr-3 font-medium">File:Line</th>
                 <th className="pb-2 pr-3 font-medium">Rule</th>
                 <th className="pb-2 font-medium">Message</th>
+                <th className="pb-2 pl-3 text-right font-medium">AI Cost</th>
               </tr>
             </thead>
             <tbody>
@@ -136,6 +138,9 @@ export function FindingsTable({ findings, loading }: { findings: FindingRow[]; l
                     </span>
                   </td>
                   <td className="max-w-[400px] py-2">{finding.message}</td>
+                  <td className="whitespace-nowrap py-2 pl-3 text-right tabular-nums">
+                    {finding.costUsd ? formatUsd(finding.costUsd) : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>

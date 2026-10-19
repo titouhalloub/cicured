@@ -27,4 +27,6 @@ export interface SuggestionWithId extends Suggestion {
  */
 export interface FindingWithId extends Finding {
   id: string;
+  /** Summed LLM spend recorded against this finding (GET /runs/:id/findings). */
+  costUsd?: number;
 }

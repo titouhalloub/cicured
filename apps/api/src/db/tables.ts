@@ -139,8 +139,12 @@ export const llmCalls = pgTable("llm_calls", {
   ruleId: text("rule_id"),
   category: text("category"),
   estimatedTokensAvoided: integer("estimated_tokens_avoided"),
+  // sha256 fingerprint of the finding this call was for (Spec §5), stored as
+  // text: the CLI has no DB row id and a fingerprint is not a uuid. Joined to
+  // findings.fingerprint by GET /runs/:id/findings for itemized fix cost.
+  findingId: text("finding_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [index("llm_calls_finding_idx").on(table.findingId)]);
 
 export type UserRow = typeof users.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;

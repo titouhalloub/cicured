@@ -23,6 +23,7 @@ interface LlmCallInsert {
   ruleId: string | null;
   category: string | null;
   estimatedTokensAvoided: number | null;
+  findingId: string | null;
 }
 
 /**
@@ -52,6 +53,8 @@ export class UsageService {
       ruleId: record.ruleId ?? null,
       category: record.category ?? null,
       estimatedTokensAvoided: record.estimatedTokensAvoided ?? null,
+      // sha256 fingerprint, joined to findings.fingerprint on the run detail page.
+      findingId: record.findingId ?? null,
     }));
 
     await this.db.insert(llmCalls).values(values);

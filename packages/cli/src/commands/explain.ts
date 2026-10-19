@@ -85,6 +85,7 @@ export async function explainCommand(args: string[]): Promise<number> {
       ruleId: finding.ruleId,
       category: finding.category,
       estimatedTokensAvoided: estimateTokensAvoided(finding),
+      findingId: finding.fingerprint,
     });
     return 0;
   } catch (error) {

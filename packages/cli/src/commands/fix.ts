@@ -144,6 +144,7 @@ export async function fixCommand(args: string[]): Promise<number> {
       ruleId: finding.ruleId,
       category: finding.category,
       estimatedTokensAvoided: estimateTokensAvoided(finding),
+      findingId: finding.fingerprint,
     });
   } catch (error) {
     process.stderr.write(`suggest failed: ${String(error)}\n`);

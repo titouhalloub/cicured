@@ -48,3 +48,13 @@ export function formatMs(ms: number): string {
   const rest = Math.round(seconds % 60);
   return `${minutes}m ${rest}s`;
 }
+
+/**
+ * USD money: "$0.00" for zero, four decimals below $1 so sub-cent LLM costs
+ * stay readable ("$0.0003"), two decimals at $1 and above.
+ */
+export function formatUsd(amount: number): string {
+  if (amount === 0) return "$0.00";
+  if (amount < 1) return `$${amount.toFixed(4)}`;
+  return `$${amount.toFixed(2)}`;
+}

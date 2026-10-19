@@ -36,13 +36,7 @@ export default function DashboardPage() {
   // Degrade to zero on error OR an empty ledger — this card never blocks or toasts.
   const usage = usageSummary && usageSummary.totalCalls > 0 ? usageSummary : null;
   const spendValue = usageLoading ? "—" : formatUsd(usage?.totalCostUsd ?? 0);
-  const savingsValue = usageLoading ? "—" : formatUsd(usage?.totalEstimatedSavingsUsd ?? 0);
   const spendCalls = usage?.totalCalls ?? 0;
-  const spendSubtitle = usageLoading
-    ? "—"
-    : `${spendCalls} ${spendCalls === 1 ? "call" : "calls"} tracked`;
-  const netRoi = usage?.netRoi ?? 0;
-  const byCategory = usage?.byCategory ?? [];
   const runs: RunSummary[] = data?.runs ?? [];
 
   const now = Date.now();
@@ -98,60 +92,52 @@ export default function DashboardPage() {
             </div>
           );
         })}
-        <div className="card flex items-center gap-4">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-primary/10 text-brand-primary">
-            <DollarSign className="h-6 w-6" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm text-text-muted-light dark:text-text-muted-dark">
-              Economic Layer
-            </p>
-            {usage || usageLoading ? (
-              <>
-                <div className="flex items-start gap-6">
-                  <div className="min-w-0">
-                    <p className="text-xs text-text-muted-light dark:text-text-muted-dark">
-                      Spend
-                    </p>
-                    <p className="text-3xl font-medium">{spendValue}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-text-muted-light dark:text-text-muted-dark">
-                      Estimated Savings
-                    </p>
-                    <p className="text-3xl font-medium text-green-500">{savingsValue}</p>
-                  </div>
-                </div>
-                <p className="truncate text-xs text-text-muted-light dark:text-text-muted-dark">
-                  {spendSubtitle}
-                </p>
-                {netRoi > 0 ? (
-                  <span className="mt-1 inline-block rounded-full bg-brand-primary/10 px-2 py-0.5 text-xs font-medium">
-                    Net ROI: {Math.round(netRoi)}×
-                  </span>
-                ) : null}
-                <ul className="mt-1 space-y-0.5">
-                  {byCategory.map((cat) => (
-                    <li
-                      key={cat.category}
-                      className="truncate text-xs text-text-muted-light dark:text-text-muted-dark"
-                    >
-                      {cat.category}: {formatUsd(cat.costUsd)}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-medium">{spendValue}</span>
-                </div>
-                <p className="truncate text-xs text-text-muted-light dark:text-text-muted-dark">
-                  {spendSubtitle}
-                </p>
-              </>
-            )}
+        <div className="card col-span-2 flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary/10 text-brand-primary">
+              <DollarSign className="h-4 w-4" />
+            </span>
+            <h3 className="text-lg font-medium">Economic Layer</h3>
           </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-6">
+            <div>
+              <p className="text-sm text-text-muted-light dark:text-text-muted-dark">Spend</p>
+              <p className="text-3xl font-bold mt-1">{spendValue}</p>
+              <p className="text-xs text-text-muted-light dark:text-text-muted-dark mt-1">
+                {spendCalls} {spendCalls === 1 ? "call" : "calls"} tracked
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-text-muted-light dark:text-text-muted-dark">
+                Estimated Savings
+              </p>
+              <p className="text-3xl font-bold text-green-500 mt-1">
+                {usage ? formatUsd(usage.totalEstimatedSavingsUsd) : "$0.00"}
+              </p>
+            </div>
+          </div>
+
+          {usage && usage.netRoi > 0 && (
+            <div className="flex items-center justify-between mt-2 pt-4 border-t border-border-light dark:border-border-dark">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Net ROI</span>
+                <span className="rounded-full bg-brand-primary/10 px-2.5 py-0.5 text-xs font-bold text-brand-primary">
+                  {Math.round(usage.netRoi)}×
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                {usage.byCategory.map((cat) => (
+                  <span
+                    key={cat.category}
+                    className="text-xs text-text-muted-light dark:text-text-muted-dark"
+                  >
+                    {cat.category}: {formatUsd(cat.costUsd)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

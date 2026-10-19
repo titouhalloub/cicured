@@ -53,6 +53,15 @@ export const EnvSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().min(1, "S3_SECRET_ACCESS_KEY is required"),
   S3_BUCKET: z.string().min(1).default("cicured-logs"),
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
+
+  /**
+   * Diff-scoped PR review (v2): OpenRouter via its OpenAI-compatible API.
+   * An unset key leaves the feature off — webhooks answer review-disabled
+   * without failing boot, mirroring the worker's "LLM disabled" stance.
+   */
+  LLM_API_BASE: z.string().url().default("https://openrouter.ai/api/v1"),
+  LLM_REVIEW_MODEL: z.string().min(1).default("google/gemini-2.5-flash"),
+  OPENROUTER_API_KEY: z.string().min(1).optional(),
 });
 
 export type AppEnv = z.infer<typeof EnvSchema>;

@@ -5,6 +5,8 @@ import type { AppConfig } from "../src/config/app-config.service";
 import { projects, webhookDeliveries } from "../src/db";
 import type { Database } from "../src/db";
 import type { RunsQueue } from "../src/queue/runs-queue.service";
+import type { GitHubClient } from "../src/auth/github.client";
+import type { DiffReviewLlm } from "../src/webhooks/diff-review.llm";
 import { WebhooksService } from "../src/webhooks/webhooks.service";
 import { makeConfig } from "./test-utils";
 
@@ -80,12 +82,29 @@ function queueDouble(): { enqueueRun: ReturnType<typeof vi.fn> } {
   return { enqueueRun: vi.fn(async () => undefined) };
 }
 
+function githubDouble() {
+  return {
+    appConfigured: true,
+    getPullRequestDiff: vi.fn(async () => ""),
+    createPullRequestReview: vi.fn(async () => undefined),
+  };
+}
+
+function llmDouble() {
+  return {
+    enabled: true,
+    reviewHunk: vi.fn(async () => ({ summary: "", comments: [] })),
+  };
+}
+
 function makeService(
   db: ReturnType<typeof dbDouble>,
   options: {
     config?: AppConfig;
     decrypt?: () => string;
     queue?: { enqueueRun: ReturnType<typeof vi.fn> };
+    github?: ReturnType<typeof githubDouble>;
+    llm?: ReturnType<typeof llmDouble>;
   } = {},
 ) {
   const queue = options.queue ?? queueDouble();
@@ -94,6 +113,8 @@ function makeService(
     db as unknown as Database,
     cryptoDouble(options.decrypt ?? (() => "12345")),
     queue as unknown as RunsQueue,
+    (options.github ?? githubDouble()) as unknown as GitHubClient,
+    (options.llm ?? llmDouble()) as unknown as DiffReviewLlm,
   );
   return { service, queue };
 }

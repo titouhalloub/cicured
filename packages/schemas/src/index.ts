@@ -43,8 +43,18 @@ export {
 } from "./project";
 export { LOG_CHUNK_MAX_BYTES, LogStream, LogChunk, LogEnd, LogEvent } from "./logs";
 export { CodeGraphFunction, CodeGraphFile, CodeGraphWarning, CodeGraph } from "./codegraph";
-export { GithubPushPayloadSchema, WebhookDeliveryResultSchema } from "./webhook";
-export type { GithubPushPayload, WebhookDeliveryResult } from "./webhook";
+export {
+  GithubPushPayloadSchema,
+  GithubPullRequestPayloadSchema,
+  WebhookDeliveryResultSchema,
+  PrReviewComment,
+  PrReviewResult,
+} from "./webhook";
+export type {
+  GithubPushPayload,
+  GithubPullRequestPayload,
+  WebhookDeliveryResult,
+} from "./webhook";
 export { TopModelUsage, CategoryUsage, UsageSummary } from "./usage";
 export * from "./llm";
 

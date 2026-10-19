@@ -185,6 +185,61 @@ export class GitHubClient {
     return body.default_branch;
   }
 
+  /** GET /repos/{owner}/{repo}/pulls/{n} as a raw unified diff (v3.diff media type). */
+  async getPullRequestDiff(
+    installationId: number,
+    owner: string,
+    repo: string,
+    prNumber: number,
+  ): Promise<string> {
+    const token = await this.createInstallationToken(installationId);
+    return this.requestText(
+      `${this.config.github.apiBase}/repos/${owner}/${repo}/pulls/${prNumber}`,
+      {
+        headers: {
+          ...this.userHeaders(token, "PR diff"),
+          accept: "application/vnd.github.v3.diff",
+        },
+      },
+      "GitHub PR diff",
+    );
+  }
+
+  /**
+   * POST /repos/{owner}/{repo}/pulls/{n}/reviews with inline comments.
+   * `position` is the legacy diff offset (lines down from the file's FIRST
+   * `@@` hunk header) — still the field the reviews endpoint requires for
+   * inline comments. `event: COMMENT` never approves or requests changes.
+   */
+  async createPullRequestReview(
+    installationId: number,
+    owner: string,
+    repo: string,
+    prNumber: number,
+    commitSha: string,
+    body: string,
+    comments: Array<{ path: string; position: number; body: string }>,
+  ): Promise<void> {
+    const token = await this.createInstallationToken(installationId);
+    await this.requestJson<unknown>(
+      `${this.config.github.apiBase}/repos/${owner}/${repo}/pulls/${prNumber}/reviews`,
+      {
+        method: "POST",
+        headers: {
+          ...this.userHeaders(token, "PR review"),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          commit_id: commitSha,
+          body,
+          event: "COMMENT",
+          comments,
+        }),
+      },
+      "GitHub PR review",
+    );
+  }
+
   private userHeaders(accessToken: string, purpose: string) {
     return {
       accept: "application/vnd.github+json",
@@ -219,5 +274,23 @@ export class GitHubClient {
       );
     }
     return (await response.json()) as T;
+  }
+
+  /** Same transport as requestJson but for non-JSON bodies (the PR diff). */
+  private async requestText(url: string, init: RequestInit, label: string): Promise<string> {
+    let response: Response;
+    try {
+      response = await fetch(url, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "network error";
+      throw new BadGatewayException(`${label} failed: ${reason}`);
+    }
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new BadGatewayException(
+        `${label} responded ${response.status}: ${text.slice(0, 200)}`,
+      );
+    }
+    return response.text();
   }
 }

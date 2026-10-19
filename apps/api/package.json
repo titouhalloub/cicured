@@ -20,6 +20,7 @@
     "@nestjs/core": "^12.1.1",
     "@nestjs/platform-express": "^12.1.1",
     "@nestjs/throttler": "^6.7.1",
+    "@sft/parser": "workspace:*",
     "@sft/schemas": "workspace:*",
     "bullmq": "^6.3.9",
     "drizzle-orm": "^0.45.3",

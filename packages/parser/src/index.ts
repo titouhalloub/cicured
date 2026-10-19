@@ -17,6 +17,8 @@ export { parseCargoClippy } from "./parsers/cargo-clippy";
 export { parseCargoTest } from "./parsers/cargo-test";
 export { parseVitest } from "./parsers/vitest";
 export { parseJson } from "./parsers/json";
+export { parseDiff } from "./diff-parser";
+export type { DiffHunk } from "./diff-parser";
 export { parseTask } from "./parsers/index";
 export type { Parser } from "./parsers/registry";
 export { PARSERS, TASK_NAME_TO_PARSER } from "./parsers/registry";

@@ -1,15 +1,23 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { GithubPushPayloadSchema } from "@sft/schemas";
+import { parseDiff } from "@sft/parser";
+import { GithubPullRequestPayloadSchema, GithubPushPayloadSchema } from "@sft/schemas";
 import { and, eq, inArray } from "drizzle-orm";
+import { GitHubClient } from "../auth/github.client";
 import { CryptoService } from "../common/crypto.service";
 import { AppConfig } from "../config/app-config.service";
 import { DRIZZLE, projects, runs, webhookDeliveries, type Database } from "../db";
 import { RunsQueue } from "../queue/runs-queue.service";
+import { DiffReviewLlm } from "./diff-review.llm";
+
+/** Hard caps that bound one webhook delivery's OpenRouter spend. */
+const MAX_REVIEW_HUNKS = 25;
+const MAX_REVIEW_COMMENTS = 30;
 
 /**
- * GitHub push webhooks (Spec §0 push trigger; M2b-2c): verify the HMAC,
- * dedupe deliveries, and fan a push event into a queued run.
+ * GitHub webhooks (Spec §0 push trigger; M2b-2c): verify the HMAC, dedupe
+ * deliveries, and fan a push event into a queued run. v2 adds diff-scoped
+ * PR review on pull_request events (opened / synchronize).
  */
 @Injectable()
 export class WebhooksService {
@@ -20,6 +28,8 @@ export class WebhooksService {
     @Inject(DRIZZLE) private readonly db: Database,
     private readonly crypto: CryptoService,
     private readonly queue: RunsQueue,
+    private readonly github: GitHubClient,
+    private readonly llm: DiffReviewLlm,
   ) {}
 
   /**
@@ -129,6 +139,106 @@ export class WebhooksService {
 
     await this.queue.enqueueRun({ runId: run.id, projectId: project.id });
     return { status: "queued", runId: run.id };
+  }
+
+  /**
+   * pull_request pipeline (v2 diff-scoped review): project + installation
+   * check (same posture as push, so a random install cannot spend our LLM
+   * budget) → fetch the unified diff → parse hunks → LLM review per hunk →
+   * post one review with inline comments at GitHub `position` offsets.
+   */
+  async handleGithubPullRequest(rawBody: Buffer): Promise<{ status: string }> {
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(rawBody.toString("utf8"));
+    } catch {
+      return { status: "ignored" };
+    }
+    const parsed = GithubPullRequestPayloadSchema.safeParse(parsedJson);
+    if (!parsed.success) return { status: "ignored" };
+    const { action, number: prNumber, pull_request, repository, installation } = parsed.data;
+    // Reviews run when the PR opens and again after each pushed commit.
+    if (action !== "opened" && action !== "synchronize") return { status: "ignored" };
+
+    const [project] = await this.db
+      .select()
+      .from(projects)
+      .where(
+        and(eq(projects.provider, "github"), eq(projects.repoFullName, repository.full_name)),
+      )
+      .limit(1);
+    if (!project) return { status: "no-matching-project" };
+
+    let installationId: string;
+    try {
+      installationId = this.crypto.decrypt(project.installationIdEnc);
+    } catch {
+      // Never log the encrypted or decrypted values (Spec §8).
+      this.logger.warn("webhook installation decrypt failed");
+      return { status: "installation-mismatch" };
+    }
+    if (installationId !== String(installation.id)) {
+      this.logger.warn("webhook installation id mismatch");
+      return { status: "installation-mismatch" };
+    }
+
+    if (!this.github.appConfigured || !this.llm.enabled) return { status: "review-disabled" };
+
+    const separator = repository.full_name.indexOf("/");
+    if (separator <= 0 || separator === repository.full_name.length - 1) {
+      return { status: "ignored" };
+    }
+    const owner = repository.full_name.slice(0, separator);
+    const repo = repository.full_name.slice(separator + 1);
+    const commitSha = pull_request.head.sha;
+
+    const diff = await this.github.getPullRequestDiff(installation.id, owner, repo, prNumber);
+    const hunks = parseDiff(diff);
+    if (hunks.length === 0) return { status: "no-diff" };
+
+    const summaries: string[] = [];
+    const comments: Array<{ path: string; position: number; body: string }> = [];
+    for (const hunk of hunks.slice(0, MAX_REVIEW_HUNKS)) {
+      let review: Awaited<ReturnType<DiffReviewLlm["reviewHunk"]>>;
+      try {
+        review = await this.llm.reviewHunk(hunk);
+      } catch (error) {
+        // One failed hunk must not sink the whole review.
+        const reason = error instanceof Error ? error.message : "unknown error";
+        this.logger.warn(`diff review hunk failed for ${hunk.path}: ${reason}`);
+        continue;
+      }
+      const summary = review.summary.trim();
+      if (summary) summaries.push(`**${hunk.path}** — ${summary}`);
+      for (const comment of review.comments) {
+        if (comments.length >= MAX_REVIEW_COMMENTS) break;
+        // The LLM counts positions from its own hunk's @@ header; GitHub
+        // counts from the file's FIRST @@ header — shift by positionBase.
+        const target = hunk.lines[comment.position - 1];
+        // Scope guard: only added lines ("+") are commentable. Context,
+        // deletions and hallucinated offsets are dropped so GitHub never
+        // 422s the entire review over one bad comment.
+        if (!target || !target.startsWith("+")) continue;
+        comments.push({
+          path: hunk.path,
+          position: hunk.positionBase + comment.position,
+          body: comment.body,
+        });
+      }
+    }
+    if (summaries.length === 0 && comments.length === 0) return { status: "no-findings" };
+
+    const summaryBlock = summaries.length > 0 ? summaries.join("\n\n") : "Inline comments below.";
+    await this.github.createPullRequestReview(
+      installation.id,
+      owner,
+      repo,
+      prNumber,
+      commitSha,
+      `## Cicured AI review\n\n${summaryBlock}`,
+      comments,
+    );
+    return { status: "review-posted" };
   }
 }
 

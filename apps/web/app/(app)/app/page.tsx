@@ -145,7 +145,7 @@ export default function DashboardPage() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-medium">Recent runs</h2>
           <Link
-            href="/runs"
+            href="/app/runs"
             className="flex items-center gap-1 text-sm font-medium text-brand-primary hover:underline"
           >
             View all
@@ -171,7 +171,7 @@ export default function DashboardPage() {
             headline="No runs yet"
             subtext="Connect a project and trigger your first run to see it here."
             action={
-              <Link href="/projects" className="text-sm font-medium text-brand-primary hover:underline">
+              <Link href="/app/projects" className="text-sm font-medium text-brand-primary hover:underline">
                 Go to projects
               </Link>
             }

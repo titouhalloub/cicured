@@ -10,7 +10,7 @@ interface RunsTableProps {
   projects: ProjectSummary[];
 }
 
-/** Reusable runs table: row click navigates to /runs/[id]; commit opens GitHub. */
+/** Reusable runs table: row click navigates to /app/runs/[id]; commit opens GitHub. */
 export function RunsTable({ runs, projects }: RunsTableProps) {
   const router = useRouter();
   const projectNameById = new Map(projects.map((project) => [project.id, project.repoFullName]));
@@ -35,7 +35,7 @@ export function RunsTable({ runs, projects }: RunsTableProps) {
             return (
               <tr
                 key={run.id}
-                onClick={() => router.push(`/runs/${run.id}`)}
+                onClick={() => router.push(`/app/runs/${run.id}`)}
                 className="cursor-pointer border-b border-black/5 transition-colors last:border-0 hover:bg-surface-light dark:border-white/10 dark:hover:bg-white/5"
               >
                 <td className="px-4 py-3">

@@ -20,6 +20,9 @@ interface LlmCallInsert {
   outputTokens: number;
   totalCostUsd: string;
   durationMs: number;
+  ruleId: string | null;
+  category: string | null;
+  estimatedTokensAvoided: number | null;
 }
 
 /**
@@ -45,6 +48,10 @@ export class UsageService {
       outputTokens: record.usage.outputTokens,
       totalCostUsd: String(record.totalCostUsd),
       durationMs: record.durationMs,
+      // Nullable columns: ledgers recorded before enrichment carry nothing here.
+      ruleId: record.ruleId ?? null,
+      category: record.category ?? null,
+      estimatedTokensAvoided: record.estimatedTokensAvoided ?? null,
     }));
 
     await this.db.insert(llmCalls).values(values);

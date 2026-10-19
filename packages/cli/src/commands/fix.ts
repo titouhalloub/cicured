@@ -21,6 +21,7 @@ import {
   type SuggestInput,
 } from "../llm";
 import { appendLlmCall } from "../storage/ledger";
+import { estimateTokensAvoided } from "../storage/estimator";
 import { snippetFor } from "../snippet";
 import { banner } from "../ui";
 
@@ -140,6 +141,9 @@ export async function fixCommand(args: string[]): Promise<number> {
       pricing: provider.pricing,
       totalCostUsd: computeCostUsd(llmResponse.usage, provider.pricing),
       durationMs: llmResponse.durationMs,
+      ruleId: finding.ruleId,
+      category: finding.category,
+      estimatedTokensAvoided: estimateTokensAvoided(finding),
     });
   } catch (error) {
     process.stderr.write(`suggest failed: ${String(error)}\n`);

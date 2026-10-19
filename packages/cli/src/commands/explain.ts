@@ -9,6 +9,7 @@ import {
   type SuggestInput,
 } from "../llm";
 import { appendLlmCall } from "../storage/ledger";
+import { estimateTokensAvoided } from "../storage/estimator";
 import { snippetFor } from "../snippet";
 import { banner } from "../ui";
 
@@ -81,6 +82,9 @@ export async function explainCommand(args: string[]): Promise<number> {
       pricing: provider.pricing,
       totalCostUsd: computeCostUsd(response.usage, provider.pricing),
       durationMs: response.durationMs,
+      ruleId: finding.ruleId,
+      category: finding.category,
+      estimatedTokensAvoided: estimateTokensAvoided(finding),
     });
     return 0;
   } catch (error) {

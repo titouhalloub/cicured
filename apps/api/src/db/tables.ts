@@ -135,6 +135,10 @@ export const llmCalls = pgTable("llm_calls", {
   outputTokens: integer("output_tokens").notNull(),
   totalCostUsd: numeric("total_cost_usd", { precision: 12, scale: 6 }).notNull(),
   durationMs: integer("duration_ms").notNull(),
+  // Finding context from the CLI ledger — nullable so older ledgers still sync.
+  ruleId: text("rule_id"),
+  category: text("category"),
+  estimatedTokensAvoided: integer("estimated_tokens_avoided"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

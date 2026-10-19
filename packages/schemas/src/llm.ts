@@ -36,5 +36,9 @@ export const LlmCallRecord = z.object({
   pricing: ModelPricing,
   totalCostUsd: z.number().nonnegative(),
   durationMs: z.number().int().nonnegative(),
+  /** Finding context the CLI attaches at the call site (cost-avoidance card). */
+  ruleId: z.string().optional(),
+  category: z.string().optional(),
+  estimatedTokensAvoided: z.number().int().nonnegative().optional(),
 });
 export type LlmCallRecord = z.infer<typeof LlmCallRecord>;

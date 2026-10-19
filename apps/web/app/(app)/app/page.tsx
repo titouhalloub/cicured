@@ -113,13 +113,13 @@ export default function DashboardPage() {
                 Estimated Savings
               </p>
               <p className="text-3xl font-bold text-green-500 mt-1">
-                {usage ? formatUsd(usage.totalEstimatedSavingsUsd) : "$0.00"}
-              </p>
+        {usageLoading ? "—" : usage ? formatUsd(usage.totalEstimatedSavingsUsd) : "$0.00"}
+      </p>
             </div>
           </div>
 
           {usage && usage.netRoi > 0 && (
-            <div className="flex items-center justify-between mt-2 pt-4 border-t border-border-light dark:border-border-dark">
+            <div className="flex items-center justify-between mt-2 pt-4 border-t border-black/5 dark:border-white/10">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium">Net ROI</span>
                 <span className="rounded-full bg-brand-primary/10 px-2.5 py-0.5 text-xs font-bold text-brand-primary">

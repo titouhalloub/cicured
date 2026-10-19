@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { LlmCallRecord } from "@sft/schemas";
 
@@ -29,5 +29,19 @@ export function readLlmCalls(cwd: string = process.cwd()): LlmCallRecord[] {
       .map((line) => JSON.parse(line) as LlmCallRecord);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Truncate the ledger after a successful upload (`sft sync` without --keep).
+ * Same contract as appendLlmCall: ledger IO never breaks the command.
+ */
+export function clearLlmCalls(cwd: string = process.cwd()): void {
+  try {
+    const p = getLedgerPath(cwd);
+    if (!existsSync(p)) return;
+    writeFileSync(p, "", "utf8");
+  } catch {
+    // Silent degradation — a stale ledger just re-uploads next time.
   }
 }

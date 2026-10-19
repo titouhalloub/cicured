@@ -3,6 +3,7 @@ import {
   boolean,
   index,
   integer,
+  numeric,
   pgTable,
   real,
   text,
@@ -10,9 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import type {
-  users,
-  webhookDeliveries} from "./schema";
+import type { webhookDeliveries } from "./schema";
 import {
   failureKindEnum,
   findingCategoryEnum,
@@ -20,7 +19,8 @@ import {
   logStreamEnum,
   projects,
   runStatusEnum,
-  runTriggerEnum
+  runTriggerEnum,
+  users,
 } from "./schema";
 
 export const runs = pgTable(
@@ -114,6 +114,30 @@ export const logs = pgTable(
   (table) => [uniqueIndex("logs_run_stream_seq_uq").on(table.runId, table.stream, table.sequence)],
 );
 
+/**
+ * Local CLI LLM usage ledger uploaded by `sft sync` (POST /usage/llm-calls,
+ * open-core Phase 3). One row per LLM call the CLI recorded in
+ * `.sft/llm-calls.jsonl` — this is what powers the per-user spend view.
+ *
+ * `runId` is advisory: it is NULL when the local record carried no run id, an
+ * unknown/placeholder uuid, or a run the user no longer owns.
+ */
+export const llmCalls = pgTable("llm_calls", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  runId: uuid("run_id").references(() => runs.id, { onDelete: "set null" }),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  mode: text("mode").notNull(),
+  inputTokens: integer("input_tokens").notNull(),
+  outputTokens: integer("output_tokens").notNull(),
+  totalCostUsd: numeric("total_cost_usd", { precision: 12, scale: 6 }).notNull(),
+  durationMs: integer("duration_ms").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type UserRow = typeof users.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect;
 export type RunRow = typeof runs.$inferSelect;
@@ -121,3 +145,4 @@ export type FindingRow = typeof findings.$inferSelect;
 export type SuggestionRow = typeof suggestions.$inferSelect;
 export type LogRow = typeof logs.$inferSelect;
 export type WebhookDeliveryRow = typeof webhookDeliveries.$inferSelect;
+export type LlmCallRow = typeof llmCalls.$inferSelect;

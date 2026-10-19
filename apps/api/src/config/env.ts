@@ -27,6 +27,17 @@ export const EnvSchema = z.object({
   /** AES-256-GCM key: base64 (32 bytes) or 64-char hex. See src/common/crypto.ts. */
   SFT_ENCRYPTION_KEY: z.string().min(1, "SFT_ENCRYPTION_KEY is required"),
 
+  /**
+   * DEV-MODE auth for the CLI ledger upload (POST /usage/llm-calls).
+   * When both are set, the API accepts `Authorization: Bearer <token>` and
+   * resolves the user by SFT_DEVICE_TOKEN_EMAIL. Pre-launch stand-in for a
+   * real device-token flow; intentionally plain strings so blank values in a
+   * copied `.env.example` boot instead of failing validation (an empty value
+   * means "not configured" to the guard).
+   */
+  SFT_DEVICE_TOKEN: z.string().optional(),
+  SFT_DEVICE_TOKEN_EMAIL: z.string().optional(),
+
   // GitHub is optional for M1 boot; endpoints that need it fail with 503 when unset.
   GITHUB_CLIENT_ID: z.string().min(1).optional(),
   GITHUB_CLIENT_SECRET: z.string().min(1).optional(),

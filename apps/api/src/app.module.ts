@@ -12,6 +12,7 @@ import { ProjectsModule } from "./projects/projects.module";
 import { QueueModule } from "./queue/queue.module";
 import { ReposModule } from "./repos/repos.module";
 import { RunsModule } from "./runs/runs.module";
+import { UsageModule } from "./usage/usage.module";
 import { UsersModule } from "./users/users.module";
 import { WebhooksModule } from "./webhooks/webhooks.module";
 
@@ -26,6 +27,7 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
     ReposModule,
     RunsModule,
     LogsModule,
+    UsageModule,
     HealthModule,
     WebhooksModule,
     // M5 §9: 60 requests per minute per IP, applied to every route. Mutating

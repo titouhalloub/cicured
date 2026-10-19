@@ -33,4 +33,10 @@ export class UsersService {
     const [row] = await this.db.select().from(users).where(eq(users.id, id)).limit(1);
     return row ?? null;
   }
+
+  /** Used by DeviceTokenGuard to resolve SFT_DEVICE_TOKEN_EMAIL to a user. */
+  async findByEmail(email: string): Promise<UserRow | null> {
+    const [row] = await this.db.select().from(users).where(eq(users.email, email)).limit(1);
+    return row ?? null;
+  }
 }

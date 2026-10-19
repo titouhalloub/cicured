@@ -25,8 +25,9 @@ Usage:
   sft explain <n>                 Explain finding #n from the last run (BYOK)
   sft fix <n>                     Generate and optionally apply a patch for #n (BYOK)
   sft graph [--json]              Build a code graph of the current repo
-  sft login                       Sign in to cicured.com (coming soon)
-  sft sync                        Upload local history (coming soon)
+  sft login                       Save the device token for cloud sync (dev-mode)
+  sft sync [--keep]               Upload the local LLM usage ledger to the API
+              (--keep leaves the local ledger in place)
   sft --version                   Print version`;
 
 async function dispatch(argv: string[]): Promise<number> {
@@ -63,7 +64,7 @@ async function dispatch(argv: string[]): Promise<number> {
     case "login":
       return loginCommand();
     case "sync":
-      return syncCommand();
+      return syncCommand(rest);
     default:
       process.stderr.write(`Unknown command: ${command}. Try \`sft --help\`.\n`);
       return 2;

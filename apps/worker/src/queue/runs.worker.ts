@@ -40,6 +40,32 @@ export interface RunsWorkerOptions {
  */
 export const WORKER_CONCURRENCY = 1;
 
+/**
+ * BullMQ's default lock is 30 seconds. A sandbox run is wall-clock capped at
+ * SFT_DEADLINE_BUDGET_MS (30 minutes), and a busy event loop — spawning Docker
+ * containers, parsing heavy reports — can delay the renewal timer past the
+ * 30s window. BullMQ then assumes the worker died and fails the job with
+ * `could not renew lock`, dropping a run that is still alive.
+ *
+ * The lock is therefore set to the full run budget: a healthy run can never
+ * outlive its lock, no matter how long the event loop stalls.
+ *
+ * Trade-off: a worker that is genuinely killed holds its job for up to this
+ * long before the stalled check re-queues it (the stall counter is bumped then
+ * and the job moves back to `wait`).
+ */
+export const RUNS_WORKER_LOCK_DURATION_MS = 1_800_000;
+
+/**
+ * Renew far more often than the expiry. The default would be half of
+ * lockDuration (15 minutes); every 30s keeps the lock fresh across moderate
+ * stalls while the 30-minute lockDuration absorbs anything longer.
+ */
+export const RUNS_WORKER_LOCK_RENEW_TIME_MS = 30_000;
+
+/** Stalled-check cadence: notice a dead worker's job within a minute of expiry. */
+export const RUNS_WORKER_STALLED_INTERVAL_MS = 60_000;
+
 export function createRunsWorker(options: RunsWorkerOptions): Worker<RunJobData> {
   const { env, connection, logger, handle } = options;
 
@@ -56,7 +82,13 @@ export function createRunsWorker(options: RunsWorkerOptions): Worker<RunJobData>
       }
       await handle(parsed.data);
     },
-    { connection, concurrency: WORKER_CONCURRENCY },
+    {
+      connection,
+      concurrency: WORKER_CONCURRENCY,
+      lockDuration: RUNS_WORKER_LOCK_DURATION_MS,
+      lockRenewTime: RUNS_WORKER_LOCK_RENEW_TIME_MS,
+      stalledInterval: RUNS_WORKER_STALLED_INTERVAL_MS,
+    },
   );
 
   worker.on("failed", (job, error) => {

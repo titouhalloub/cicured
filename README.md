@@ -94,6 +94,6 @@ Business material (the product `.docx` and the raw spec download it came with)
 is deliberately **not** kept in the repo: §14 scopes the work to the spec, and
 §13 lists everything the business doc asks for that is out of MVP scope.
 
-<!-- Testing the bot -->
+<!-- Testing the bot reda -->
 
 

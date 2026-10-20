@@ -6,7 +6,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { GitHubClient } from "../auth/github.client";
 import { CryptoService } from "../common/crypto.service";
 import { AppConfig } from "../config/app-config.service";
-import { DRIZZLE, projects, runs, webhookDeliveries, type Database } from "../db";
+import { DRIZZLE, llmCalls, projects, runs, webhookDeliveries, type Database } from "../db";
 import { RunsQueue } from "../queue/runs-queue.service";
 import { DiffReviewLlm } from "./diff-review.llm";
 
@@ -223,6 +223,8 @@ export class WebhooksService {
     // Billed usage across every hunk — feeds the cost receipt footer.
     let inputTokens = 0;
     let outputTokens = 0;
+    // Wall-clock of the review loop — stored as llm_calls.duration_ms.
+    const reviewStartedAt = Date.now();
     for (const hunk of hunks.slice(0, MAX_REVIEW_HUNKS)) {
       let review: Awaited<ReturnType<DiffReviewLlm["reviewHunk"]>>;
       try {
@@ -261,6 +263,35 @@ export class WebhooksService {
     const costUsd =
       (inputTokens / 1_000_000) * INPUT_TOKEN_USD_PER_M +
       (outputTokens / 1_000_000) * OUTPUT_TOKEN_USD_PER_M;
+
+    // Same llm_calls ledger the CLI fills via `sft sync` — without this the
+    // Economic Layer card shows $0.00 for hosted reviews. Written before the
+    // GitHub call so a review we already paid for is never left unbilled, and
+    // best-effort so a DB hiccup can never lose the review itself.
+    try {
+      await this.db.insert(llmCalls).values({
+        userId: project.userId,
+        // Ties the review cost to the background PR run enqueued above.
+        ...(runId !== undefined ? { runId } : {}),
+        // "openai-compatible" (not "openrouter"): the provider value must stay
+        // inside LlmProviderId in packages/schemas/src/llm.ts — the shared
+        // source of truth — even though llm_calls.provider is free text.
+        provider: "openai-compatible",
+        model: this.config.env.LLM_REVIEW_MODEL,
+        mode: "explain",
+        inputTokens,
+        outputTokens,
+        // numeric(12,6) is typed as string by drizzle (see UsageService).
+        totalCostUsd: String(costUsd),
+        durationMs: Date.now() - reviewStartedAt,
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown error";
+      this.logger.warn(
+        `could not persist review usage for ${repository.full_name}#${prNumber}: ${reason}`,
+      );
+    }
+
     const receipt =
       `Cost of this review: ${formatUsd(costUsd)} · ` +
       `Estimated tokens saved: ${TOKENS_SAVED_ESTIMATE.toLocaleString("en-US")}`;

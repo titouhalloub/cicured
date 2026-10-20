@@ -14,6 +14,12 @@ import { DiffReviewLlm } from "./diff-review.llm";
 const MAX_REVIEW_HUNKS = 25;
 const MAX_REVIEW_COMMENTS = 30;
 
+/** Pricing behind the cost receipt: USD per 1M tokens (input · output). */
+const INPUT_TOKEN_USD_PER_M = 3.0;
+const OUTPUT_TOKEN_USD_PER_M = 15.0;
+/** Editorial estimate printed next to the cost — not a measured value. */
+const TOKENS_SAVED_ESTIMATE = 15_000;
+
 /**
  * GitHub webhooks (Spec §0 push trigger; M2b-2c): verify the HMAC, dedupe
  * deliveries, and fan a push event into a queued run. v2 adds diff-scoped
@@ -142,12 +148,13 @@ export class WebhooksService {
   }
 
   /**
-   * pull_request pipeline (v2 diff-scoped review): project + installation
-   * check (same posture as push, so a random install cannot spend our LLM
-   * budget) → fetch the unified diff → parse hunks → LLM review per hunk →
-   * post one review with inline comments at GitHub `position` offsets.
+   * pull_request pipeline (v2 combined): project + installation check (same
+   * posture as push, so a random install cannot spend our LLM budget) →
+   * enqueue the background sandbox run for the PR head → fetch the unified
+   * diff → parse hunks → LLM review per hunk → post one review with inline
+   * comments at GitHub `position` offsets plus a cost receipt footer.
    */
-  async handleGithubPullRequest(rawBody: Buffer): Promise<{ status: string }> {
+  async handleGithubPullRequest(rawBody: Buffer): Promise<{ status: string; runId?: string }> {
     let parsedJson: unknown;
     try {
       parsedJson = JSON.parse(rawBody.toString("utf8"));
@@ -182,8 +189,6 @@ export class WebhooksService {
       return { status: "installation-mismatch" };
     }
 
-    if (!this.github.appConfigured || !this.llm.enabled) return { status: "review-disabled" };
-
     const separator = repository.full_name.indexOf("/");
     if (separator <= 0 || separator === repository.full_name.length - 1) {
       return { status: "ignored" };
@@ -191,13 +196,33 @@ export class WebhooksService {
     const owner = repository.full_name.slice(0, separator);
     const repo = repository.full_name.slice(separator + 1);
     const commitSha = pull_request.head.sha;
+    const headBranch = pull_request.head.ref;
+
+    // Background run first: the ~3 min sandbox must not wait behind the LLM
+    // review loop. Best-effort — a queue hiccup must never block the review.
+    let runId: string | undefined;
+    try {
+      runId = await this.enqueuePullRequestRun(project.id, commitSha, headBranch, prNumber);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown error";
+      this.logger.warn(`PR run enqueue failed for ${repository.full_name}#${prNumber}: ${reason}`);
+    }
+
+    if (!this.github.appConfigured || !this.llm.enabled) {
+      return { status: "review-disabled", ...(runId !== undefined ? { runId } : {}) };
+    }
 
     const diff = await this.github.getPullRequestDiff(installation.id, owner, repo, prNumber);
     const hunks = parseDiff(diff);
-    if (hunks.length === 0) return { status: "no-diff" };
+    if (hunks.length === 0) {
+      return { status: "no-diff", ...(runId !== undefined ? { runId } : {}) };
+    }
 
     const summaries: string[] = [];
     const comments: Array<{ path: string; position: number; body: string }> = [];
+    // Billed usage across every hunk — feeds the cost receipt footer.
+    let inputTokens = 0;
+    let outputTokens = 0;
     for (const hunk of hunks.slice(0, MAX_REVIEW_HUNKS)) {
       let review: Awaited<ReturnType<DiffReviewLlm["reviewHunk"]>>;
       try {
@@ -208,9 +233,11 @@ export class WebhooksService {
         this.logger.warn(`diff review hunk failed for ${hunk.path}: ${reason}`);
         continue;
       }
-      const summary = review.summary.trim();
+      inputTokens += review.usage.inputTokens;
+      outputTokens += review.usage.outputTokens;
+      const summary = review.result.summary.trim();
       if (summary) summaries.push(`**${hunk.path}** — ${summary}`);
-      for (const comment of review.comments) {
+      for (const comment of review.result.comments) {
         if (comments.length >= MAX_REVIEW_COMMENTS) break;
         // The LLM counts positions from its own hunk's @@ header; GitHub
         // counts from the file's FIRST @@ header — shift by positionBase.
@@ -226,19 +253,62 @@ export class WebhooksService {
         });
       }
     }
-    if (summaries.length === 0 && comments.length === 0) return { status: "no-findings" };
+    if (summaries.length === 0 && comments.length === 0) {
+      return { status: "no-findings", ...(runId !== undefined ? { runId } : {}) };
+    }
 
     const summaryBlock = summaries.length > 0 ? summaries.join("\n\n") : "Inline comments below.";
+    const costUsd =
+      (inputTokens / 1_000_000) * INPUT_TOKEN_USD_PER_M +
+      (outputTokens / 1_000_000) * OUTPUT_TOKEN_USD_PER_M;
+    const receipt =
+      `Cost of this review: ${formatUsd(costUsd)} · ` +
+      `Estimated tokens saved: ${TOKENS_SAVED_ESTIMATE.toLocaleString("en-US")}`;
     await this.github.createPullRequestReview(
       installation.id,
       owner,
       repo,
       prNumber,
       commitSha,
-      `## Cicured AI review\n\n${summaryBlock}`,
+      `## Cicured AI review\n\n${summaryBlock}\n\n---\n*${receipt}*`,
       comments,
     );
-    return { status: "review-posted" };
+    return { status: "review-posted", ...(runId !== undefined ? { runId } : {}) };
+  }
+
+  /**
+   * Insert + enqueue the background `pr`-triggered run for this PR head.
+   * Returns undefined when a queued/running run for the same sha already
+   * exists (the push handler's dedup posture, reused so a redelivered event
+   * never doubles a sandbox).
+   */
+  private async enqueuePullRequestRun(
+    projectId: string,
+    sha: string,
+    branch: string,
+    prNumber: number,
+  ): Promise<string | undefined> {
+    const [existing] = await this.db
+      .select({ id: runs.id })
+      .from(runs)
+      .where(
+        and(
+          eq(runs.projectId, projectId),
+          eq(runs.sha, sha),
+          inArray(runs.status, ["queued", "running"]),
+        ),
+      )
+      .limit(1);
+    if (existing) return undefined;
+
+    const [run] = await this.db
+      .insert(runs)
+      .values({ projectId, sha, branch, trigger: "pr", status: "queued" })
+      .returning({ id: runs.id });
+    if (!run) throw new Error("run insert returned no row");
+
+    await this.queue.enqueueRun({ runId: run.id, projectId, prNumber });
+    return run.id;
   }
 }
 
@@ -250,4 +320,15 @@ function isUniqueViolation(error: unknown): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === "23505"
   );
+}
+
+/**
+ * Mirrors apps/web/lib/format.ts `formatUsd` so the GitHub cost receipt uses
+ * the same rounding the dashboard does: `$0.00` for no spend, four decimals
+ * under $1, two from $1 up.
+ */
+function formatUsd(amount: number): string {
+  if (amount === 0) return "$0.00";
+  if (amount < 1) return `$${amount.toFixed(4)}`;
+  return `$${amount.toFixed(2)}`;
 }

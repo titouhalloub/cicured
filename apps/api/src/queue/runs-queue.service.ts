@@ -8,6 +8,8 @@ export const RUN_JOB_NAME = "run";
 export interface RunJobData {
   runId: string;
   projectId: string;
+  /** Present for pull_request-triggered runs: the worker comments the build diagnosis back onto the PR. */
+  prNumber?: number;
 }
 
 /** Thin wrapper so services and tests never touch BullMQ directly. */

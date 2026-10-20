@@ -17,6 +17,7 @@ import { generateSuggestions } from "../ai/generate";
 import { decryptInstallationId } from "../common/crypto";
 import { registerSecret, unregisterSecret, type WorkerLogger } from "../common/secrets";
 import type { WorkerEnv } from "../env";
+import type { WorkerGitHubClient } from "../github/client";
 import type { ExtractedReport } from "../report/handler";
 import type { LogStreamHandle } from "../logs/attach";
 import type { LogPublisher } from "../logs/publisher";
@@ -47,6 +48,10 @@ export interface RunJobDeps {
   sandbox: SandboxLauncher;
   extractReport: ReportExtractor;
   mintToken: (installationId: number) => Promise<string>;
+  /** v2 combined pipeline: posts the build diagnosis back onto the PR that
+   * triggered the run. Optional so push-triggered runs (and existing tests)
+   * never see it. */
+  githubClient?: Pick<WorkerGitHubClient, "postPullRequestComment">;
   logger: WorkerLogger;
   /** M4a AI suggestion engine. When both are present, a generation pass runs
    * after findings are persisted. */
@@ -67,7 +72,8 @@ export interface RunJobResult {
   reportPath?: string;
 }
 
-export type RunJob = (runId: string) => Promise<RunJobResult | null>;
+/** `prNumber` is present only for jobs enqueued by a pull_request webhook (v2 combined pipeline). */
+export type RunJob = (runId: string, prNumber?: number) => Promise<RunJobResult | null>;
 
 interface Outcome {
   status: RunStatus;
@@ -181,7 +187,7 @@ async function readStagedGraph(
  * written to the run row, to a job payload or to a log line.
  */
 export function createRunJob(deps: RunJobDeps): RunJob {
-  return async function processRun(runId: string): Promise<RunJobResult | null> {
+  return async function processRun(runId: string, prNumber?: number): Promise<RunJobResult | null> {
     const logger = deps.logger.child({ runId });
 
     const loaded = await deps.repository.loadRunWithProject(runId);
@@ -265,10 +271,14 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       // Best-effort by contract: a parse or insert hiccup must not fail a
       // run whose report already landed.
       let parsedFindings: FindingsWithFingerprint[] | undefined;
+      // What actually reached the DB — the PR diagnosis comment must agree
+      // with the dashboard, so it is only counted after the insert succeeds.
+      let insertedFindings: FindingsWithFingerprint[] = [];
       if (outcome.report) {
         try {
           parsedFindings = parseReport(outcome.report);
           await deps.repository.insertFindings(runId, parsedFindings);
+          insertedFindings = parsedFindings;
         } catch (error) {
           logger.error("could not persist findings", error);
         }
@@ -349,6 +359,24 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       logger.info(
         `run finished status=${outcome.status} exit=${outcome.exitCode ?? "none"} report=${outcome.reportPath ?? "none"}`,
       );
+
+      // v2 combined pipeline: PR-triggered runs comment the diagnosis back.
+      // Best-effort — the run is already finalized, so a GitHub failure is
+      // logged and can neither fail nor re-run the job.
+      if (prNumber !== undefined && deps.githubClient) {
+        await commentBuildDiagnosis({
+          client: deps.githubClient,
+          logger,
+          webAppUrl: deps.env.WEB_APP_URL,
+          runId,
+          prNumber,
+          installationId,
+          repoFullName: loaded.project.repoFullName,
+          status: outcome.status,
+          findings: insertedFindings,
+        });
+      }
+
       return {
         runId,
         status: outcome.status,
@@ -395,5 +423,88 @@ async function markRunnerCrash(
     });
   } catch (error) {
     deps.logger.child({ runId }).error("could not persist runner_crash", error);
+  }
+}
+
+/** PR comments list at most this many findings; the dashboard shows the rest. */
+const MAX_DIAGNOSIS_FINDINGS = 50;
+
+/** Report paths are absolute inside the sandbox; the comment shows them repo-relative. */
+const SANDBOX_REPO_PREFIX = "/workspace/repo/";
+
+function severityEmoji(severity: string): string {
+  if (severity === "warning") return "🟡";
+  if (severity === "info") return "🔵";
+  return "🔴";
+}
+
+/**
+ * Markdown body of the post-run PR comment (v2 combined pipeline): status
+ * line, one bullet per finding, and a dashboard link where the run and its
+ * graph-validated fixes can be reviewed.
+ */
+export function formatBuildDiagnosis(
+  runId: string,
+  webAppUrl: string,
+  status: RunStatus,
+  findings: FindingsWithFingerprint[],
+): string {
+  const lines = [
+    "### Cicured Build Diagnosis",
+    `**Status:** ${status === "success" ? "Passed" : "Failed"} (${findings.length} findings)`,
+    "",
+  ];
+  const shown = findings.slice(0, MAX_DIAGNOSIS_FINDINGS);
+  if (shown.length === 0) {
+    lines.push("- ✅ No findings.");
+  }
+  for (const finding of shown) {
+    const file = finding.file.startsWith(SANDBOX_REPO_PREFIX)
+      ? finding.file.slice(SANDBOX_REPO_PREFIX.length)
+      : finding.file;
+    lines.push(
+      `- ${severityEmoji(finding.severity)} \`${finding.ruleId}\` in \`${file}:${finding.line}\` - \`${finding.message}\``,
+    );
+  }
+  if (findings.length > shown.length) {
+    lines.push(`- …and ${findings.length - shown.length} more on the dashboard.`);
+  }
+  lines.push(
+    "",
+    `[View the full run and apply fixes on your dashboard](${webAppUrl}/app/runs/${runId})`,
+  );
+  return lines.join("\n");
+}
+
+/** Posts the diagnosis comment; never throws (a comment cannot fail a run). */
+async function commentBuildDiagnosis(input: {
+  client: Pick<WorkerGitHubClient, "postPullRequestComment">;
+  logger: WorkerLogger;
+  webAppUrl: string;
+  runId: string;
+  prNumber: number;
+  installationId: number;
+  repoFullName: string;
+  status: RunStatus;
+  findings: FindingsWithFingerprint[];
+}): Promise<void> {
+  const { client, logger, webAppUrl, runId, prNumber, installationId, repoFullName } = input;
+  const separator = repoFullName.indexOf("/");
+  if (separator <= 0 || separator === repoFullName.length - 1) {
+    logger.warn(`cannot post PR diagnosis: malformed repo full name`);
+    return;
+  }
+  const body = formatBuildDiagnosis(runId, webAppUrl, input.status, input.findings);
+  try {
+    await client.postPullRequestComment(
+      repoFullName.slice(0, separator),
+      repoFullName.slice(separator + 1),
+      prNumber,
+      installationId,
+      body,
+    );
+    logger.info(`posted build diagnosis to PR #${prNumber} (${input.findings.length} findings)`);
+  } catch (error) {
+    logger.error(`could not post build diagnosis to PR #${prNumber}`, error);
   }
 }

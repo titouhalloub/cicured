@@ -66,7 +66,11 @@ export const GithubPullRequestPayloadSchema = z
     action: z.string().min(1),
     number: z.number().int().positive(),
     pull_request: z.object({
-      head: z.object({ sha: z.string().min(1).max(64) }),
+      head: z.object({
+        sha: z.string().min(1).max(64),
+        /** Head branch name — becomes `runs.branch` for the background PR run. */
+        ref: z.string().min(1),
+      }),
     }),
     repository: z.object({
       full_name: z.string().min(1),

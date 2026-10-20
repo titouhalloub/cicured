@@ -3,6 +3,7 @@ import IORedis from "ioredis";
 import { createLogger } from "./common/secrets";
 import { createDb } from "./db";
 import { assertRunnerArtifact, loadDotEnvFile, loadEnv } from "./env";
+import { createGitHubClient } from "./github/client";
 import { mintInstallationToken } from "./github/token";
 import { createRunJob } from "./job/run-job";
 import { attachAndStream } from "./logs/attach";
@@ -58,6 +59,7 @@ async function main(): Promise<void> {
     attach: ({ containerId, runId, archiver }) =>
       attachAndStream(docker, containerId, runId, logPublisher, logger, archiver),
     mintToken: (installationId) => mintInstallationToken(installationId, env),
+    githubClient: createGitHubClient(env),
     extractReport: ({ containerId, runId }) =>
       extractAndValidateReport(
         docker,
@@ -74,7 +76,7 @@ async function main(): Promise<void> {
     env,
     connection: redis,
     logger,
-    handle: (data) => processRun(data.runId),
+    handle: (data) => processRun(data.runId, data.prNumber),
   });
 
   let shuttingDown = false;

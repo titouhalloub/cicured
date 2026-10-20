@@ -93,7 +93,10 @@ function githubDouble() {
 function llmDouble() {
   return {
     enabled: true,
-    reviewHunk: vi.fn(async () => ({ summary: "", comments: [] })),
+    reviewHunk: vi.fn(async () => ({
+      result: { summary: "", comments: [] },
+      usage: { inputTokens: 0, outputTokens: 0 },
+    })),
   };
 }
 

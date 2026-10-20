@@ -37,6 +37,9 @@ export const EnvSchema = z.object({
   GITHUB_APP_PRIVATE_KEY: z.string().min(1, "GITHUB_APP_PRIVATE_KEY is required"),
   GITHUB_API_BASE: z.string().url().default("https://api.github.com"),
 
+  /** Dashboard origin used in PR comment links back to a finished run (v2 combined pipeline). */
+  WEB_APP_URL: z.string().url().default("http://localhost:3000"),
+
   /** Sandbox image built from docker/sandbox/Dockerfile. */
   SANDBOX_IMAGE: z.string().min(1).default("cicured/sandbox:node20"),
   /** M2a report storage on the worker host. S3 archival is M2b. */

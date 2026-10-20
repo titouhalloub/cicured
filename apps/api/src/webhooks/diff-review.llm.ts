@@ -13,6 +13,12 @@ const SYSTEM_PROMPT =
   "of a pull request diff hunk. Respond with raw JSON only: no markdown " +
   "fences, no prose before or after the JSON object.";
 
+/** One hunk's review plus the token usage OpenRouter billed for it — feeds the cost receipt footer. */
+export interface HunkReview {
+  result: PrReviewResult;
+  usage: { inputTokens: number; outputTokens: number };
+}
+
 /**
  * OpenRouter (OpenAI-compatible) chat client for the diff-scoped PR reviewer.
  * Feature-gated on OPENROUTER_API_KEY: `enabled` false disables PR reviews
@@ -28,10 +34,12 @@ export class DiffReviewLlm {
 
   /**
    * Reviews one hunk and validates the model's JSON against PrReviewResult.
-   * Throws on transport errors, HTTP errors or unparseable output — callers
-   * treat a failed hunk as skippable, never fatal for the whole review.
+   * The billed token usage travels with the result so the webhook can print
+   * a cost receipt footer. Throws on transport errors, HTTP errors or
+   * unparseable output — callers treat a failed hunk as skippable, never
+   * fatal for the whole review.
    */
-  async reviewHunk(hunk: DiffHunk): Promise<PrReviewResult> {
+  async reviewHunk(hunk: DiffHunk): Promise<HunkReview> {
     const apiKey = this.config.env.OPENROUTER_API_KEY;
     if (!apiKey) throw new BadGatewayException("OPENROUTER_API_KEY is not configured");
 
@@ -66,10 +74,17 @@ export class DiffReviewLlm {
     }
     const payload = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
-    return PrReviewResult.parse(
-      extractReviewJson(payload.choices?.[0]?.message?.content ?? ""),
-    );
+    return {
+      result: PrReviewResult.parse(
+        extractReviewJson(payload.choices?.[0]?.message?.content ?? ""),
+      ),
+      usage: {
+        inputTokens: payload.usage?.prompt_tokens ?? 0,
+        outputTokens: payload.usage?.completion_tokens ?? 0,
+      },
+    };
   }
 }
 

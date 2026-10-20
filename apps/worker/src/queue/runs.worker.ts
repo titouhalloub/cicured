@@ -18,6 +18,8 @@ export const RUN_JOB_NAME = "run";
 export const RunJobDataSchema = z.object({
   runId: z.string().regex(UUID_PATTERN, "runId must be a uuid"),
   projectId: z.string().regex(UUID_PATTERN).optional(),
+  /** Present for pull_request-triggered runs: post the diagnosis comment back to the PR. */
+  prNumber: z.number().int().positive().optional(),
 });
 
 export type RunJobData = z.infer<typeof RunJobDataSchema>;

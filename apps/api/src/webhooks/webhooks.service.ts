@@ -255,19 +255,15 @@ export class WebhooksService {
         });
       }
     }
-    if (summaries.length === 0 && comments.length === 0) {
-      return { status: "no-findings", ...(runId !== undefined ? { runId } : {}) };
-    }
-
-    const summaryBlock = summaries.length > 0 ? summaries.join("\n\n") : "Inline comments below.";
     const costUsd =
       (inputTokens / 1_000_000) * INPUT_TOKEN_USD_PER_M +
       (outputTokens / 1_000_000) * OUTPUT_TOKEN_USD_PER_M;
 
     // Same llm_calls ledger the CLI fills via `sft sync` — without this the
     // Economic Layer card shows $0.00 for hosted reviews. Written before the
-    // GitHub call so a review we already paid for is never left unbilled, and
-    // best-effort so a DB hiccup can never lose the review itself.
+    // no-findings early return and before the GitHub call so a review we
+    // already paid for is never left unbilled, and best-effort so a DB hiccup
+    // can never lose the review itself.
     try {
       await this.db.insert(llmCalls).values({
         userId: project.userId,
@@ -291,6 +287,12 @@ export class WebhooksService {
         `could not persist review usage for ${repository.full_name}#${prNumber}: ${reason}`,
       );
     }
+
+    if (summaries.length === 0 && comments.length === 0) {
+      return { status: "no-findings", ...(runId !== undefined ? { runId } : {}) };
+    }
+
+    const summaryBlock = summaries.length > 0 ? summaries.join("\n\n") : "Inline comments below.";
 
     const receipt =
       `Cost of this review: ${formatUsd(costUsd)} · ` +

@@ -42,6 +42,9 @@ export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 # a minor version mismatch warns instead of failing the run.
 export COREPACK_ENABLE_STRICT=0
 export npm_config_cache="$WORKSPACE/.npm"
+# Sandbox installs must not depend on the user's repo .npmrc: force the public
+# registry so every cloned repo resolves tarballs from the same fast host.
+export npm_config_registry=https://registry.npmjs.org/
 export PNPM_HOME="$WORKSPACE/.pnpm"
 export YARN_CACHE_FOLDER="$WORKSPACE/.yarn"
 # Never block waiting for git credentials - the token is in the URL below.

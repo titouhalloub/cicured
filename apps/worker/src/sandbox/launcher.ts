@@ -132,6 +132,17 @@ export async function createSandboxContainer(
         `${outDir}:/out:rw`,
         `${env.PNPM_STORE_HOST_PATH}:/pnpm-store:rw`,
       ],
+      // Named volume for cargo's registry cache: the image rootfs is read-only
+      // and HOME=/workspace, so cargo lives in /usr/local/cargo and its
+      // downloaded crates would be re-fetched on every run without this.
+      Mounts: [
+        {
+          Type: "volume",
+          Source: "sft-cargo-registry",
+          Target: "/usr/local/cargo/registry",
+          ReadOnly: false,
+        },
+      ],
     },
   };
 

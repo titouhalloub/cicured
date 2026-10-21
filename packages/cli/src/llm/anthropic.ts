@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { LlmProvider, LlmRequest, LlmResponse, ProviderConfig } from "./types";
 import { type SuggestInput, validateFilesTouched } from "./prompt";
 import { lookupPricing, computeCostUsd } from "./pricing";
+const testPRVariable = "this will fail lint";  
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 const DEFAULT_MODEL = "claude-sonnet-4-5";

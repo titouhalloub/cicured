@@ -30,7 +30,7 @@ interface GithubInstallationTokenResponse {
   token: string;
 }
 
-const APP_JWT_TTL_SECONDS = 540; // GitHub caps app JWTs at 10 minutes.
+const APP_JWT_TTL_SECONDS = 300; // GitHub caps app JWTs at 10 minutes.
 const REQUEST_TIMEOUT_MS = 15_000;
 
 /** Normalizes a PEM that is either inline or base64-encoded in one env var. */

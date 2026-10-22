@@ -265,6 +265,28 @@ export function createRunJob(deps: RunJobDeps): RunJob {
 
       const outcome = await classifyOutcome(deps, handle, waitResult, runId);
       assertRunStatusTransition("running", outcome.status);
+      
+      let s3ReportKey: string | null = null;
+      if (outcome.reportPath) {
+        try {
+          const { readFile } = await import("node:fs/promises");
+          const { createS3Client } = await import("../logs/s3-client");
+          const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+          const s3 = createS3Client(deps.env);
+          const body = await readFile(outcome.reportPath);
+          const key = `reports/${runId}/sft-report.json`;
+          await s3.send(new PutObjectCommand({
+            Bucket: deps.env.S3_BUCKET,
+            Key: key,
+            Body: body,
+            ContentType: "application/json"
+          }));
+          s3ReportKey = key;
+        } catch (err) {
+          deps.logger.child({ runId }).warn("failed to upload report to S3", err);
+        }
+      }
+
       const finishedAt = new Date();
 
       // M3b: derive findings from the report before persisting the outcome.
@@ -342,6 +364,7 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       }
 
       await deps.repository.finalizeRun(runId, {
+        s3ReportKey,
         status: outcome.status,
         exitCode: outcome.exitCode,
         failureKind: outcome.failureKind,

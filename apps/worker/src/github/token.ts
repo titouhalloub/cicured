@@ -2,7 +2,7 @@ import { createSign } from "node:crypto";
 import type { WorkerEnv } from "../env";
 
 /** GitHub caps app JWTs at 10 minutes. */
-const APP_JWT_TTL_SECONDS = 540;
+const APP_JWT_TTL_SECONDS = 300;
 /** Backdate `iat` so small clock skews do not invalidate the JWT. */
 const CLOCK_SKEW_SECONDS = 60;
 const REQUEST_TIMEOUT_MS = 15_000;

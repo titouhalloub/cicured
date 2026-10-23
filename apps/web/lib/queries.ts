@@ -107,6 +107,19 @@ export function useSuggestions(runId: string, enabled: boolean) {
 }
 
 /**
+ * GET /runs/:id/report — presigned URL to the archived report.
+ * The client fetches the report JSON from this URL to render the task timeline.
+ */
+export function useReport(runId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["report", runId],
+    queryFn: () => apiFetch<{ url: string }>(`/runs/${runId}/report`),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/**
  * POST /suggestions/:id/feedback — accept or reject a suggestion (Spec §4
  * step 11). Records the verdict only; it never applies the patch.
  */

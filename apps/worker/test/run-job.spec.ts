@@ -86,6 +86,7 @@ function makeRun(status: RunWithProject["run"]["status"] = "queued"): RunWithPro
       finishedAt: null,
       buildMinutes: null,
       s3_log_key: null,
+      s3_report_key: null,
     },
     project: {
       id: "22222222-2222-4222-8222-222222222222",

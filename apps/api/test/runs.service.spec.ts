@@ -4,6 +4,8 @@ import { RunsService } from "../src/runs/runs.service";
 import type { Database, FindingRow, ProjectRow, RunRow, SuggestionRow } from "../src/db";
 import type { ProjectsService } from "../src/projects/projects.service";
 import type { RunsQueue } from "../src/queue/runs-queue.service";
+import type { S3Client } from "@aws-sdk/client-s3";
+import type { AppConfig } from "../src/config/app-config.service";
 
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
 const RUN_ID = "11111111-1111-4111-8111-111111111111";
@@ -211,7 +213,7 @@ describe("RunsService.createManualRun (Spec §14 acceptance: queued row + BullMQ
       },
     } as unknown as RunsQueue;
 
-    const service = new RunsService(db, queue, makeProjectsStub(makeProjectRow()));
+    const service = new RunsService(db, {} as unknown as S3Client, {} as unknown as AppConfig, queue, makeProjectsStub(makeProjectRow()));
     const row = await service.createManualRun({ id: USER_ID } as never, PROJECT_ID, {});
 
     expect(row.status).toBe("queued");
@@ -231,6 +233,8 @@ describe("RunsService.createManualRun (Spec §14 acceptance: queued row + BullMQ
     });
     const service = new RunsService(
       db,
+      {} as unknown as S3Client,
+      {} as unknown as AppConfig,
       { enqueueRun: () => Promise.resolve() } as unknown as RunsQueue,
       makeProjectsStub(makeProjectRow({ defaultBranch: "main" })),
     );
@@ -247,6 +251,8 @@ describe("RunsService.createManualRun (Spec §14 acceptance: queued row + BullMQ
     const { db } = makeDbStub();
     const service = new RunsService(
       db,
+      {} as unknown as S3Client,
+      {} as unknown as AppConfig,
       { enqueueRun: () => Promise.resolve() } as unknown as RunsQueue,
       makeProjectsStub(null),
     );
@@ -265,7 +271,7 @@ describe("RunsService.createManualRun (Spec §14 acceptance: queued row + BullMQ
       enqueueRun: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
     } as unknown as RunsQueue;
 
-    const service = new RunsService(db, failingQueue, makeProjectsStub(makeProjectRow()));
+    const service = new RunsService(db, {} as unknown as S3Client, {} as unknown as AppConfig, failingQueue, makeProjectsStub(makeProjectRow()));
 
     await expect(
       service.createManualRun({ id: USER_ID } as never, PROJECT_ID, {}),
@@ -281,6 +287,8 @@ describe("RunsService.createManualRun guards (M5 §9)", () => {
     const enqueued: Array<{ runId: string; projectId: string }> = [];
     const service = new RunsService(
       db,
+      {} as unknown as S3Client,
+      {} as unknown as AppConfig,
       {
         enqueueRun: (data: { runId: string; projectId: string }) => {
           enqueued.push(data);
@@ -385,6 +393,8 @@ describe("RunsService.transition (Spec §5 state machine)", () => {
     });
     const service = new RunsService(
       db,
+      {} as unknown as S3Client,
+      {} as unknown as AppConfig,
       {} as unknown as RunsQueue,
       makeProjectsStub(makeProjectRow()),
     );
@@ -401,6 +411,8 @@ describe("RunsService.transition (Spec §5 state machine)", () => {
     const { db, calls } = makeDbStub();
     const service = new RunsService(
       db,
+      {} as unknown as S3Client,
+      {} as unknown as AppConfig,
       {} as unknown as RunsQueue,
       makeProjectsStub(makeProjectRow()),
     );
@@ -414,7 +426,7 @@ describe("RunsService.transition (Spec §5 state machine)", () => {
 
 describe("RunsService.findingsForRun (M4b-2a: GET /runs/:id/findings)", () => {
   function makeService(db: Database, project: ProjectRow | null = makeProjectRow()) {
-    return new RunsService(db, {} as unknown as RunsQueue, makeProjectsStub(project));
+    return new RunsService(db, {} as unknown as S3Client, {} as unknown as AppConfig, {} as unknown as RunsQueue, makeProjectsStub(project));
   }
 
   it("returns [] for a run with no findings", async () => {
@@ -458,7 +470,7 @@ describe("RunsService.findingsForRun (M4b-2a: GET /runs/:id/findings)", () => {
 
 describe("RunsService.suggestionsForRun (M4b-2a: GET /runs/:id/suggestions)", () => {
   function makeService(db: Database, project: ProjectRow | null = makeProjectRow()) {
-    return new RunsService(db, {} as unknown as RunsQueue, makeProjectsStub(project));
+    return new RunsService(db, {} as unknown as S3Client, {} as unknown as AppConfig, {} as unknown as RunsQueue, makeProjectsStub(project));
   }
 
   it("returns [] when none exist", async () => {
@@ -499,7 +511,7 @@ describe("RunsService.suggestionsForRun (M4b-2a: GET /runs/:id/suggestions)", ()
 
 describe("RunsService.recordFeedback (M4b-2a: POST /suggestions/:id/feedback)", () => {
   function makeService(db: Database, project: ProjectRow | null = makeProjectRow()) {
-    return new RunsService(db, {} as unknown as RunsQueue, makeProjectsStub(project));
+    return new RunsService(db, {} as unknown as S3Client, {} as unknown as AppConfig, {} as unknown as RunsQueue, makeProjectsStub(project));
   }
 
   it("returns 404 for a foreign-owned suggestion", async () => {

@@ -1,0 +1,159 @@
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.2 [39m[90mE:/cicured/apps/api[39m
+
+ [31m❯[39m test/usage.controller.spec.ts [2m([22m[2m13 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 16[2mms[22m[39m
+   [32m✓[39m DeviceTokenGuard [2m(6)[22m
+     [32m✓[39m accepts a matching bearer token and attaches the resolved user[32m 3[2mms[22m[39m
+     [32m✓[39m rejects a mismatched bearer token without a user lookup[32m 1[2mms[22m[39m
+     [32m✓[39m rejects a bearer token when device auth is not configured[32m 1[2mms[22m[39m
+     [32m✓[39m rejects when the configured email resolves to no user[32m 0[2mms[22m[39m
+     [32m✓[39m falls back to the session guard when no bearer header is present[32m 0[2mms[22m[39m
+     [32m✓[39m rejects when neither a bearer token nor a session is valid[32m 0[2mms[22m[39m
+   [32m✓[39m UsageService.insertLlmCalls [2m(4)[22m
+     [32m✓[39m maps ledger records onto llm_calls rows and keeps resolvable run links[32m 2[2mms[22m[39m
+     [32m✓[39m stores NULL for an unknown placeholder run instead of failing the batch[32m 0[2mms[22m[39m
+     [32m✓[39m skips the run lookup entirely for a non-uuid runId[32m 0[2mms[22m[39m
+     [32m✓[39m does not touch the database for an empty batch[32m 0[2mms[22m[39m
+   [31m❯[39m UsageService.getSummary [2m(2)[22m
+[31m     [31m×[31m aggregates totals and coerces numeric-string sums to numbers[39m[32m 4[2mms[22m[39m
+[31m     [31m×[31m returns zeros and an empty list for a user with no calls[39m[32m 1[2mms[22m[39m
+   [32m✓[39m UsageController.getUsageSummary [2m(1)[22m
+     [32m✓[39m delegates to the service with the authenticated user[32m 0[2mms[22m[39m
+ [31m❯[39m test/runs.service.spec.ts [2m([22m[2m21 tests[22m[2m | [22m[31m4 failed[39m[2m)[22m[32m 18[2mms[22m[39m
+   [32m✓[39m RunsService.createManualRun (Spec §14 acceptance: queued row + BullMQ job) [2m(4)[22m
+     [32m✓[39m inserts a queued run and enqueues the job for that run id[32m 3[2mms[22m[39m
+     [32m✓[39m honours sha/branch overrides from the request body[32m 0[2mms[22m[39m
+     [32m✓[39m returns 404 for a project the user does not own[32m 1[2mms[22m[39m
+     [32m✓[39m marks the run cancelled and returns 503 when the queue is unavailable[32m 1[2mms[22m[39m
+   [32m✓[39m RunsService.createManualRun guards (M5 §9) [2m(6)[22m
+     [32m✓[39m throws Conflict when the user already has 3 active runs[32m 1[2mms[22m[39m
+     [32m✓[39m allows a run when the user is under the concurrency limit[32m 0[2mms[22m[39m
+     [32m✓[39m returns the existing run when a queued/running run for the same project+sha exists[32m 0[2mms[22m[39m
+     [32m✓[39m skips dedup when sha is null and always creates a new run[32m 0[2mms[22m[39m
+     [32m✓[39m throws Forbidden when the user has exceeded their plan's monthly build-minute quota[32m 1[2mms[22m[39m
+     [32m✓[39m allows a run when the user is still inside their plan quota[32m 0[2mms[22m[39m
+   [32m✓[39m RunsService.transition (Spec §5 state machine) [2m(2)[22m
+     [32m✓[39m applies a legal transition[32m 0[2mms[22m[39m
+     [32m✓[39m rejects an illegal transition before touching the database[32m 0[2mms[22m[39m
+   [31m❯[39m RunsService.findingsForRun (M4b-2a: GET /runs/:id/findings) [2m(3)[22m
+[31m     [31m×[31m returns [] for a run with no findings[39m[32m 5[2mms[22m[39m
+     [32m✓[39m throws NotFoundException for a foreign-owned run[32m 0[2mms[22m[39m
+[31m     [31m×[31m orders by severity desc, file asc, line asc[39m[32m 0[2mms[22m[39m
+   [31m❯[39m RunsService.suggestionsForRun (M4b-2a: GET /runs/:id/suggestions) [2m(2)[22m
+[31m     [31m×[31m returns [] when none exist[39m[32m 1[2mms[22m[39m
+[31m     [31m×[31m joins suggestions through findings and scopes to the run[39m[32m 0[2mms[22m[39m
+   [32m✓[39m RunsService.recordFeedback (M4b-2a: POST /suggestions/:id/feedback) [2m(4)[22m
+     [32m✓[39m returns 404 for a foreign-owned suggestion[32m 0[2mms[22m[39m
+     [32m✓[39m returns 404 when the suggestion does not exist[32m 0[2mms[22m[39m
+     [32m✓[39m updates accepted and returns { ok: true }[32m 0[2mms[22m[39m
+     [32m✓[39m can flip an accepted suggestion back to rejected[32m 0[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 6 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m test/runs.service.spec.ts[2m > [22mRunsService.findingsForRun (M4b-2a: GET /runs/:id/findings)[2m > [22mreturns [] for a run with no findings
+[31m[1mAssertionError[22m: promise rejected "TypeError: (intermediate value) is not it…" instead of resolving[39m
+[36m [2m❯[22m test/runs.service.spec.ts:[2m435:75[22m[39m
+    [90m433|[39m     const { db } = makeDbStub({ ownedRows: [makeRunRow()], rows: [] });
+    [90m434|[39m
+    [90m435|[39m     await expect(makeService(db).findingsForRun({ id: USER_ID } as nev…
+    [90m   |[39m                                                                           [31m^[39m
+    [90m436|[39m       [],
+    [90m437|[39m     );
+
+[31m[1mCaused by: TypeError[22m: (intermediate value) is not iterable[39m
+[36m [2m❯[22m RunsService.getOwnedRun src/runs/runs.service.ts:[2m223:23[22m[39m
+[90m [2m❯[22m RunsService.findingsForRun src/runs/runs.service.ts:[2m241:5[22m[39m
+[90m [2m❯[22m test/runs.service.spec.ts:[2m435:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/runs.service.spec.ts[2m > [22mRunsService.findingsForRun (M4b-2a: GET /runs/:id/findings)[2m > [22morders by severity desc, file asc, line asc
+[31m[1mTypeError[22m: (intermediate value) is not iterable[39m
+[36m [2m❯[22m RunsService.getOwnedRun src/runs/runs.service.ts:[2m223:23[22m[39m
+    [90m221|[39m     if (!project) throw new NotFoundException("run not found");
+    [90m222|[39m
+    [90m223|[39m     const [costRow] = await this.db
+    [90m   |[39m                       [31m^[39m
+    [90m224|[39m       .select({ totalCostUsd: sum(llmCalls.totalCostUsd) })
+    [90m225|[39m       .from(llmCalls)
+[90m [2m❯[22m RunsService.findingsForRun src/runs/runs.service.ts:[2m241:5[22m[39m
+[90m [2m❯[22m test/runs.service.spec.ts:[2m458:18[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/runs.service.spec.ts[2m > [22mRunsService.suggestionsForRun (M4b-2a: GET /runs/:id/suggestions)[2m > [22mreturns [] when none exist
+[31m[1mAssertionError[22m: promise rejected "TypeError: (intermediate value) is not it…" instead of resolving[39m
+[36m [2m❯[22m test/runs.service.spec.ts:[2m480:67[22m[39m
+    [90m478|[39m
+    [90m479|[39m     await expect(
+    [90m480|[39m       makeService(db).suggestionsForRun({ id: USER_ID } as never, RUN_…
+    [90m   |[39m                                                                   [31m^[39m
+    [90m481|[39m     ).resolves.toEqual([]);
+    [90m482|[39m   });
+
+[31m[1mCaused by: TypeError[22m: (intermediate value) is not iterable[39m
+[36m [2m❯[22m RunsService.getOwnedRun src/runs/runs.service.ts:[2m223:23[22m[39m
+[90m [2m❯[22m RunsService.suggestionsForRun src/runs/runs.service.ts:[2m269:5[22m[39m
+[90m [2m❯[22m test/runs.service.spec.ts:[2m479:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/runs.service.spec.ts[2m > [22mRunsService.suggestionsForRun (M4b-2a: GET /runs/:id/suggestions)[2m > [22mjoins suggestions through findings and scopes to the run
+[31m[1mTypeError[22m: (intermediate value) is not iterable[39m
+[36m [2m❯[22m RunsService.getOwnedRun src/runs/runs.service.ts:[2m223:23[22m[39m
+    [90m221|[39m     if (!project) throw new NotFoundException("run not found");
+    [90m222|[39m
+    [90m223|[39m     const [costRow] = await this.db
+    [90m   |[39m                       [31m^[39m
+    [90m224|[39m       .select({ totalCostUsd: sum(llmCalls.totalCostUsd) })
+    [90m225|[39m       .from(llmCalls)
+[90m [2m❯[22m RunsService.suggestionsForRun src/runs/runs.service.ts:[2m269:5[22m[39m
+[90m [2m❯[22m test/runs.service.spec.ts:[2m488:25[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/usage.controller.spec.ts[2m > [22mUsageService.getSummary[2m > [22maggregates totals and coerces numeric-string sums to numbers
+[31m[1mAssertionError[22m: promise rejected "TypeError: this.db.select(...).from(...).…" instead of resolving[39m
+[36m [2m❯[22m test/usage.controller.spec.ts:[2m237:37[22m[39m
+    [90m235|[39m     const service = new UsageService(db);
+    [90m236|[39m
+    [90m237|[39m     await expect(service.getSummary(user)).resolves.toEqual({
+    [90m   |[39m                                     [31m^[39m
+    [90m238|[39m       totalCalls: 2,
+    [90m239|[39m       totalCostUsd: 0.0007,
+
+[31m[1mCaused by: TypeError[22m: this.db.select(...).from(...).where(...).groupBy is not a function[39m
+[36m [2m❯[22m UsageService.getSummary src/usage/usage.service.ts:[2m101:8[22m[39m
+[90m [2m❯[22m test/usage.controller.spec.ts:[2m237:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m test/usage.controller.spec.ts[2m > [22mUsageService.getSummary[2m > [22mreturns zeros and an empty list for a user with no calls
+[31m[1mAssertionError[22m: promise rejected "TypeError: this.db.select(...).from(...).…" instead of resolving[39m
+[36m [2m❯[22m test/usage.controller.spec.ts:[2m254:37[22m[39m
+    [90m252|[39m     const service = new UsageService(db);
+    [90m253|[39m
+    [90m254|[39m     await expect(service.getSummary(user)).resolves.toEqual({
+    [90m   |[39m                                     [31m^[39m
+    [90m255|[39m       totalCalls: 0,
+    [90m256|[39m       totalCostUsd: 0,
+
+[31m[1mCaused by: TypeError[22m: this.db.select(...).from(...).where(...).groupBy is not a function[39m
+[36m [2m❯[22m UsageService.getSummary src/usage/usage.service.ts:[2m101:8[22m[39m
+[90m [2m❯[22m test/usage.controller.spec.ts:[2m254:5[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m2 failed[39m[22m[90m (2)[39m
+[2m      Tests [22m [1m[31m6 failed[39m[22m[2m | [22m[1m[32m28 passed[39m[22m[90m (34)[39m
+[2m   Start at [22m 14:29:19
+[2m   Duration [22m 1.05s[2m (import 78%, transform 19%, tests 2%, setup 1%)[22m
+
+Error: ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL
+
+  × "pnpm recursive exec" failed in E:\cicured\apps\api
+

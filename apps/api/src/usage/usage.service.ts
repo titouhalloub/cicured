@@ -3,6 +3,14 @@ import { UUID_PATTERN, UsageSummary, type LlmCallRecord } from "@sft/schemas";
 import { and, count, desc, eq, inArray, isNotNull, sql, sum } from "drizzle-orm";
 import { DRIZZLE, llmCalls, projects, runs, type Database, type UserRow } from "../db";
 
+/** One row of the dashboard "Bugs Fixed by Type" breakdown table. */
+export interface BreakdownRow {
+  category: string;
+  ruleId: string;
+  bugCount: number;
+  totalCostUsd: number;
+}
+
 /** How many models the cost dashboard card ranks by spend. */
 const TOP_MODELS_LIMIT = 5;
 
@@ -68,7 +76,7 @@ export class UsageService {
    * (and null for an empty set), so values are coerced before the shared
    * schema gets the final say.
    */
-  async getSummary(user: UserRow): Promise<UsageSummary> {
+  async getSummary(user: UserRow): Promise<UsageSummary & { breakdown: BreakdownRow[] }> {
     const [totals] = await this.db
       .select({
         totalCalls: count(),
@@ -92,12 +100,30 @@ export class UsageService {
       .where(and(eq(llmCalls.userId, user.id), isNotNull(llmCalls.category)))
       .groupBy(llmCalls.category);
 
+    const breakdown = await this.db
+      .select({
+        category: llmCalls.category,
+        ruleId: llmCalls.ruleId,
+        bugCount: count(),
+        totalCostUsd: sum(llmCalls.totalCostUsd),
+      })
+      .from(llmCalls)
+      .where(
+        and(
+          eq(llmCalls.userId, user.id),
+          isNotNull(llmCalls.category),
+          isNotNull(llmCalls.ruleId),
+        ),
+      )
+      .groupBy(llmCalls.category, llmCalls.ruleId)
+      .orderBy(desc(sql`sum(${llmCalls.totalCostUsd})`));
+
     const totalCostUsd = toUsdNumber(totals?.totalCostUsd);
     const totalTokensAvoided = Number(totals?.tokensAvoided ?? 0);
     const totalEstimatedSavingsUsd = (totalTokensAvoided / 1_000_000) * 15.0;
     const netRoi = totalCostUsd > 0 ? totalEstimatedSavingsUsd / totalCostUsd : 0;
 
-    return UsageSummary.parse({
+    const summary = UsageSummary.parse({
       totalCalls: totals?.totalCalls ?? 0,
       totalCostUsd,
       totalTokensAvoided,
@@ -114,6 +140,16 @@ export class UsageService {
         costUsd: toUsdNumber(row.costUsd),
       })),
     });
+
+    return {
+      ...summary,
+      breakdown: breakdown.map((row) => ({
+        category: row.category ?? "",
+        ruleId: row.ruleId ?? "",
+        bugCount: Number(row.bugCount),
+        totalCostUsd: toUsdNumber(row.totalCostUsd),
+      })),
+    };
   }
 
   /**

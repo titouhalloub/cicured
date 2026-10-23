@@ -23,7 +23,9 @@ export function toProjectSummary(row: ProjectRow): ProjectSummary {
   };
 }
 
-export function toRunSummary(row: RunRow): RunSummary {
+export function toRunSummary(
+  row: RunRow & { totalCostUsd?: number },
+): RunSummary {
   return {
     id: row.id,
     projectId: row.projectId,
@@ -37,5 +39,6 @@ export function toRunSummary(row: RunRow): RunSummary {
     startedAt: row.startedAt ? row.startedAt.toISOString() : null,
     finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,
     buildMinutes: row.buildMinutes,
+    totalCostUsd: row.totalCostUsd,
   };
 }

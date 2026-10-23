@@ -273,8 +273,15 @@ export function createRunJob(deps: RunJobDeps): RunJob {
 
       const finishedAt = new Date();
       let s3ReportKey: string | null | undefined;
-      if (outcome.report && deps.uploadReport) {
-        s3ReportKey = await deps.uploadReport(runId, outcome.report);
+      if (outcome.reportPath && deps.uploadReport) {
+        try {
+          const fs = await import("node:fs/promises");
+          const reportText = await fs.readFile(outcome.reportPath, "utf8");
+          const report = JSON.parse(reportText);
+          s3ReportKey = await deps.uploadReport(runId, report);
+        } catch (err) {
+          logger.error("failed to read or upload report", err);
+        }
       }
 
       // M3b: derive findings from the report before persisting the outcome.
@@ -354,10 +361,6 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       // M4b: archive the validated report to S3 (best-effort; never fails the run).
       // The report lives at outcome.reportPath after extractAndValidateReport
       // moved it out of the per-run staging directory.
-        } catch (error) {
-          logger.error("failed to archive report to S3", error);
-        }
-      }
 
       await deps.repository.finalizeRun(runId, {
         s3ReportKey,

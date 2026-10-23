@@ -6,7 +6,7 @@ import {
   Post,
   UseGuards,
 } from "@nestjs/common";
-import { LlmCallRecord, UsageSummary } from "@sft/schemas";
+import { LlmCallRecord, RoiReceipt, UsageSummary } from "@sft/schemas";
 import { z } from "zod";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { DeviceTokenGuard } from "../auth/device-token.guard";
@@ -56,5 +56,12 @@ export class UsageController {
   @UseGuards(SessionGuard)
   async getUsageSummary(@CurrentUser() user: UserRow): Promise<UsageSummary> {
     return this.usageService.getSummary(user);
+  }
+
+  /** GET /usage/roi-receipt — static findings + AI spend, session-only like /summary. */
+  @Get("roi-receipt")
+  @UseGuards(SessionGuard)
+  async getRoiReceipt(@CurrentUser() user: UserRow): Promise<RoiReceipt> {
+    return this.usageService.getRoiReceipt(user.id);
   }
 }

@@ -55,6 +55,13 @@ export type {
   GithubPullRequestPayload,
   WebhookDeliveryResult,
 } from "./webhook";
-export { TopModelUsage, CategoryUsage, UsageSummary } from "./usage";
+export {
+  TopModelUsage,
+  CategoryUsage,
+  UsageSummary,
+  RoiBugGroup,
+  RoiRunReceipt,
+  RoiReceipt,
+} from "./usage";
 export * from "./llm";
 

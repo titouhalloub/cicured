@@ -1,6 +1,6 @@
 // All requests go to the Next.js server, which proxies /api/* to the API.
 // This keeps cookies same-origin and eliminates CORS.
-import type { UsageSummary } from "@sft/schemas";
+import type { RoiReceipt, UsageSummary } from "@sft/schemas";
 
 const API_URL = "/api";
 
@@ -41,6 +41,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
  */
 export function getUsageSummary(): Promise<UsageSummary> {
   return apiFetch<UsageSummary>("/usage/summary");
+}
+
+/** GET /usage/roi-receipt — static findings plus AI spend for the dashboard receipt. */
+export function getRoiReceipt(): Promise<RoiReceipt> {
+  return apiFetch<RoiReceipt>("/usage/roi-receipt");
 }
 
 export const API_BASE = API_URL;

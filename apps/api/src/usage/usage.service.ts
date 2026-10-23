@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { UUID_PATTERN, UsageSummary, type LlmCallRecord } from "@sft/schemas";
+import { UUID_PATTERN, UsageSummary, RoiReceipt, type LlmCallRecord } from "@sft/schemas";
 import { and, count, desc, eq, inArray, isNotNull, sql, sum } from "drizzle-orm";
-import { DRIZZLE, llmCalls, projects, runs, type Database, type UserRow } from "../db";
+import { DRIZZLE, findings, llmCalls, projects, runs, type Database, type UserRow } from "../db";
 
 /** One row of the dashboard "Bugs Fixed by Type" breakdown table. */
 export interface BreakdownRow {
@@ -13,6 +13,12 @@ export interface BreakdownRow {
 
 /** How many models the cost dashboard card ranks by spend. */
 const TOP_MODELS_LIMIT = 5;
+
+/** ROI Receipt assumptions — shown in the UI as estimates, never as measurements. */
+const MINUTES_PER_BUG = 20;
+const DEV_RATE_USD_PER_HOUR = 50;
+const RECENT_RUNS_LIMIT = 5;
+const BUG_GROUPS_LIMIT = 50;
 
 /** Ledger record as uploaded by the CLI — runId is optional and advisory. */
 export type SyncLlmCall = LlmCallRecord & { runId?: string };
@@ -150,6 +156,125 @@ export class UsageService {
         totalCostUsd: toUsdNumber(row.totalCostUsd),
       })),
     };
+  }
+
+  /**
+   * GET /usage/roi-receipt: free static findings + paid AI spend in one view.
+   *
+   * AI cost per (category, ruleId) group comes from a pre-aggregated subquery
+   * joined on ruleId. Joining findings straight to llm_calls would repeat each
+   * call once per matching finding and multiply the cost by the bug count.
+   */
+  async getRoiReceipt(userId: string): Promise<RoiReceipt> {
+    const [spend] = await this.db
+      .select({ totalCalls: count(), totalCostUsd: sum(llmCalls.totalCostUsd) })
+      .from(llmCalls)
+      .where(eq(llmCalls.userId, userId));
+
+    // findings -> runs -> projects scopes the count to this user's repos.
+    const [bugs] = await this.db
+      .select({ value: count() })
+      .from(findings)
+      .innerJoin(runs, eq(runs.id, findings.runId))
+      .innerJoin(projects, eq(projects.id, runs.projectId))
+      .where(eq(projects.userId, userId));
+
+    const aiCostByRule = this.db
+      .select({ ruleId: llmCalls.ruleId, cost: sum(llmCalls.totalCostUsd).as("ai_cost") })
+      .from(llmCalls)
+      .where(and(eq(llmCalls.userId, userId), isNotNull(llmCalls.ruleId)))
+      .groupBy(llmCalls.ruleId)
+      .as("ai_cost_by_rule");
+
+    const groups = await this.db
+      .select({
+        category: findings.category,
+        ruleId: findings.ruleId,
+        bugCount: count(),
+        // One cost row per ruleId, so max() just unwraps it inside the GROUP BY.
+        aiCost: sql<string | null>`max(${aiCostByRule.cost})`,
+      })
+      .from(findings)
+      .innerJoin(runs, eq(runs.id, findings.runId))
+      .innerJoin(projects, eq(projects.id, runs.projectId))
+      .leftJoin(aiCostByRule, eq(aiCostByRule.ruleId, findings.ruleId))
+      .where(eq(projects.userId, userId))
+      .groupBy(findings.category, findings.ruleId)
+      .orderBy(desc(sql`count(*)`))
+      .limit(BUG_GROUPS_LIMIT);
+
+    const totalSpend = toUsdNumber(spend?.totalCostUsd);
+    const totalBugsFound = Number(bugs?.value ?? 0);
+    const estimatedTimeSavedHours = (totalBugsFound * MINUTES_PER_BUG) / 60;
+    const estimatedSavingsUsd = estimatedTimeSavedHours * DEV_RATE_USD_PER_HOUR;
+
+    return RoiReceipt.parse({
+      totalSpend,
+      totalCalls: Number(spend?.totalCalls ?? 0),
+      totalBugsFound,
+      estimatedTimeSavedHours,
+      estimatedSavingsUsd,
+      roiMultiplier: totalSpend > 0 ? estimatedSavingsUsd / totalSpend : 0,
+      bugsByType: groups.map((row) => ({
+        category: row.category,
+        ruleId: row.ruleId,
+        bugCount: Number(row.bugCount),
+        aiCost: toUsdNumber(row.aiCost),
+      })),
+      recentRuns: await this.recentRunReceipts(userId),
+    });
+  }
+
+  /** Last N runs with bug count, AI cost and a per-category cost breakdown. */
+  private async recentRunReceipts(userId: string) {
+    const recent = await this.db
+      .select({
+        id: runs.id,
+        sha: runs.sha,
+        status: runs.status,
+        createdAt: runs.createdAt,
+        repoFullName: projects.repoFullName,
+      })
+      .from(runs)
+      .innerJoin(projects, eq(projects.id, runs.projectId))
+      .where(eq(projects.userId, userId))
+      .orderBy(desc(runs.createdAt))
+      .limit(RECENT_RUNS_LIMIT);
+    if (recent.length === 0) return [];
+    const ids = recent.map((run) => run.id);
+
+    const costs = await this.db
+      .select({
+        runId: llmCalls.runId,
+        category: llmCalls.category,
+        costUsd: sum(llmCalls.totalCostUsd),
+      })
+      .from(llmCalls)
+      .where(and(eq(llmCalls.userId, userId), inArray(llmCalls.runId, ids)))
+      .groupBy(llmCalls.runId, llmCalls.category);
+
+    const bugCounts = await this.db
+      .select({ runId: findings.runId, bugs: count() })
+      .from(findings)
+      .where(inArray(findings.runId, ids))
+      .groupBy(findings.runId);
+
+    return recent.map((run) => {
+      const breakdown = costs
+        .filter((row) => row.runId === run.id)
+        .map((row) => ({ category: row.category ?? "Uncategorized", costUsd: toUsdNumber(row.costUsd) }))
+        .sort((a, b) => b.costUsd - a.costUsd);
+      return {
+        runId: run.id,
+        repoFullName: run.repoFullName,
+        sha: run.sha,
+        status: run.status,
+        createdAt: run.createdAt.toISOString(),
+        bugCount: Number(bugCounts.find((row) => row.runId === run.id)?.bugs ?? 0),
+        totalCostUsd: breakdown.reduce((total, item) => total + item.costUsd, 0),
+        breakdown,
+      };
+    });
   }
 
   /**

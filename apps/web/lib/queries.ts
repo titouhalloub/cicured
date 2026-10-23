@@ -2,7 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { LogEvent, type SessionUser } from "@sft/schemas";
-import { API_BASE, apiFetch, getUsageSummary } from "./api";
+import { API_BASE, apiFetch, getRoiReceipt, getUsageSummary } from "./api";
 import type { FindingWithId, ProjectSummary, RunSummary, SuggestionWithId } from "./schemas";
 
 /** Shape of GET /projects/:id/runs (Spec §6). */
@@ -66,6 +66,16 @@ export function useUsageSummary() {
   return useQuery({
     queryKey: ["usage-summary"],
     queryFn: getUsageSummary,
+    staleTime: 60_000,
+    retry: 1,
+  });
+}
+
+/** GET /usage/roi-receipt — the dashboard's ROI Receipt. */
+export function useRoiReceipt() {
+  return useQuery({
+    queryKey: ["roi-receipt"],
+    queryFn: getRoiReceipt,
     staleTime: 60_000,
     retry: 1,
   });

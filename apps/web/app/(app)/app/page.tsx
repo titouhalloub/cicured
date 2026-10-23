@@ -1,11 +1,12 @@
 "use client";
-import { ArrowRight, CheckCircle2, Clock, DollarSign, PlayCircle, Rocket, Table, XCircle } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock, PlayCircle, Rocket, XCircle } from "lucide-react";
 import Link from "next/link";
-import type { RunSummary, UsageSummary } from "@sft/schemas";
+import type { RunSummary } from "@sft/schemas";
+import { RoiReceipt } from "@/components/dashboard/roi-receipt";
 import { EmptyState } from "@/components/empty-state";
 import { RunsTable } from "@/components/runs/runs-table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAllRuns, useUsageSummary } from "@/lib/queries";
+import { useAllRuns } from "@/lib/queries";
 
 interface StatCard {
   label: string;
@@ -24,30 +25,8 @@ const STATS: StatCard[] = [
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** `$0.0003` under $1, `$1.24` at or above — and plain `$0.00` for no spend. */
-function formatUsd(amount: number): string {
-  if (amount === 0) return "$0.00";
-  return amount < 1 ? `$${amount.toFixed(4)}` : `$${amount.toFixed(2)}`;
-}
-
-/** Usage summary extended with the runtime `breakdown` array from the API. */
-type UsageSummaryWithBreakdown = UsageSummary & {
-  breakdown: Array<{
-    category: string;
-    ruleId: string;
-    bugCount: number;
-    totalCostUsd: number;
-  }>;
-};
-
 export default function DashboardPage() {
   const { data, isLoading, isError } = useAllRuns();
-  const { data: usageSummary, isLoading: usageLoading } = useUsageSummary();
-  // Degrade to zero on error OR an empty ledger — this card never blocks or toasts.
-  const usage = usageSummary && usageSummary.totalCalls > 0 ? (usageSummary as UsageSummaryWithBreakdown) : null;
-  const breakdown = usage?.breakdown ?? [];
-  const spendValue = usageLoading ? "—" : formatUsd(usage?.totalCostUsd ?? 0);
-  const spendCalls = usage?.totalCalls ?? 0;
   const runs: RunSummary[] = data?.runs ?? [];
 
   const now = Date.now();
@@ -103,139 +82,9 @@ export default function DashboardPage() {
             </div>
           );
         })}
-        <div className="card col-span-2 flex flex-col gap-4">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary/10 text-brand-primary">
-              <DollarSign className="h-4 w-4" />
-            </span>
-            <h3 className="text-lg font-medium">Economic Layer</h3>
-          </div>
-
-          <div className="mt-2 grid grid-cols-2 gap-6">
-            <div>
-              <p className="text-sm text-text-muted-light dark:text-text-muted-dark">Spend</p>
-              <p className="text-3xl font-bold mt-1">{spendValue}</p>
-              <p className="text-xs text-text-muted-light dark:text-text-muted-dark mt-1">
-                {spendCalls} {spendCalls === 1 ? "call" : "calls"} tracked
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-text-muted-light dark:text-text-muted-dark">
-                Estimated Savings
-              </p>
-              <p className="text-3xl font-bold text-green-500 mt-1">
-        {usageLoading ? "—" : usage ? formatUsd(usage.totalEstimatedSavingsUsd) : "$0.00"}
-      </p>
-            </div>
-          </div>
-
-          {usage && usage.netRoi > 0 && (
-            <div className="flex items-center justify-between mt-2 pt-4 border-t border-black/5 dark:border-white/10">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Net ROI</span>
-                <span className="rounded-full bg-brand-primary/10 px-2.5 py-0.5 text-xs font-bold text-brand-primary">
-                  {Math.round(usage.netRoi)}×
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                {usage.byCategory.map((cat) => (
-                  <span
-                    key={cat.category}
-                    className="text-xs text-text-muted-light dark:text-text-muted-dark"
-                  >
-                    {cat.category}: {formatUsd(cat.costUsd)}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
       </section>
 
-      <section className="card">
-        <div className="mb-4 flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary/10 text-brand-primary">
-            <Table className="h-4 w-4" />
-          </span>
-          <div>
-            <h2 className="text-lg font-medium">Bugs Fixed by Type</h2>
-            <p className="text-sm text-text-muted-light dark:text-text-muted-dark">
-              Fixes grouped by lint rule, with the AI cost each rule type incurred.
-            </p>
-          </div>
-        </div>
-
-        {usageLoading ? (
-          <div className="flex flex-col gap-3">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Skeleton key={index} className="h-10 w-full" />
-            ))}
-          </div>
-        ) : usage && usage.netRoi > 0 ? (
-          <div className="mt-2 flex items-center gap-2 border-t border-black/5 pt-4 dark:border-white/10">
-            <span className="text-sm font-medium">Net ROI</span>
-            <span className="rounded-full bg-brand-primary/10 px-2.5 py-0.5 text-xs font-bold text-brand-primary">
-              {Math.round(usage.netRoi)}×
-            </span>
-          </div>
-        ) : null}
-
-        {usage && usage.byCategory && usage.byCategory.length > 0 ? (
-          <div className="mt-2 border-t border-black/5 pt-4 dark:border-white/10">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-wide text-text-muted-light dark:text-text-muted-dark">
-                  <th className="pb-2 font-medium">Category</th>
-                  <th className="pb-2 text-right font-medium">Calls</th>
-                  <th className="pb-2 text-right font-medium">Cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {usage.byCategory.map((cat) => (
-                  <tr key={cat.category} className="border-t border-black/5 dark:border-white/10">
-                    <td className="py-1.5">{cat.category}</td>
-                    <td className="py-1.5 text-right">{cat.calls}</td>
-                    <td className="py-1.5 text-right font-medium">{formatUsd(cat.costUsd)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : breakdown.length === 0 ? (
-          <p className="text-sm text-text-muted-light dark:text-text-muted-dark">
-            No categorised fixes recorded yet. The breakdown appears once runs report
-            lint-rule fixes.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-black/5 text-left text-xs uppercase tracking-wide text-text-muted-light dark:border-white/10 dark:text-text-muted-dark">
-                  <th className="py-2 pr-4 font-medium">Type</th>
-                  <th className="py-2 pr-4 font-medium">Rule</th>
-                  <th className="py-2 pr-4 text-right font-medium">Bugs Fixed</th>
-                  <th className="py-2 text-right font-medium">AI Cost</th>
-                </tr>
-              </thead>
-              <tbody>
-                {breakdown.map((row) => (
-                  <tr
-                    key={`${row.category}:${row.ruleId}`}
-                    className="border-b border-black/5 last:border-0 dark:border-white/10"
-                  >
-                    <td className="py-2 pr-4 font-medium">{row.category}</td>
-                    <td className="py-2 pr-4 font-mono text-xs text-text-muted-light dark:text-text-muted-dark">
-                      {row.ruleId}
-                    </td>
-                    <td className="py-2 pr-4 text-right tabular-nums">{row.bugCount}</td>
-                    <td className="py-2 text-right tabular-nums">{formatUsd(row.totalCostUsd)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <RoiReceipt />
 
       <section className="card">
         <div className="mb-4 flex items-center justify-between">

@@ -27,3 +27,38 @@ export const UsageSummary = z.object({
   topModels: z.array(TopModelUsage),
 });
 export type UsageSummary = z.infer<typeof UsageSummary>;
+
+/** One row of "Bugs by type": static findings plus the AI spend booked against the same rule. */
+export const RoiBugGroup = z.object({
+  category: z.string(),
+  ruleId: z.string(),
+  bugCount: z.number(),
+  aiCost: z.number(), // 0 for purely static findings
+});
+export type RoiBugGroup = z.infer<typeof RoiBugGroup>;
+
+/** One "Recent Run Receipt". */
+export const RoiRunReceipt = z.object({
+  runId: z.string(),
+  repoFullName: z.string(),
+  sha: z.string().nullable(),
+  status: z.string(),
+  createdAt: z.string(),
+  bugCount: z.number(),
+  totalCostUsd: z.number(),
+  breakdown: z.array(z.object({ category: z.string(), costUsd: z.number() })),
+});
+export type RoiRunReceipt = z.infer<typeof RoiRunReceipt>;
+
+/** GET /usage/roi-receipt response. */
+export const RoiReceipt = z.object({
+  totalSpend: z.number(),
+  totalCalls: z.number(),
+  totalBugsFound: z.number(),
+  estimatedTimeSavedHours: z.number(),
+  estimatedSavingsUsd: z.number(),
+  roiMultiplier: z.number(), // 0 when there is no spend
+  bugsByType: z.array(RoiBugGroup),
+  recentRuns: z.array(RoiRunReceipt),
+});
+export type RoiReceipt = z.infer<typeof RoiReceipt>;

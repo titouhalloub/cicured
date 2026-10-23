@@ -270,6 +270,8 @@ export class WebhooksService {
     try {
       await this.db.insert(llmCalls).values({
         userId: project.userId,
+            category: "Code Review",
+            ruleId: "pr-diff-review",
         // Ties the review cost to the background PR run enqueued above.
         ...(runId !== undefined ? { runId } : {}),
         // "openai-compatible" (not "openrouter"): the provider value must stay

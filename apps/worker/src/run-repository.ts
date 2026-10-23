@@ -71,6 +71,7 @@ export interface LogArchiveSizes {
 }
 
 export interface FinalizeRunInput {
+  s3ReportKey?: string | null;
   status: RunStatus;
   exitCode: number | null;
   failureKind: FailureKind | null;

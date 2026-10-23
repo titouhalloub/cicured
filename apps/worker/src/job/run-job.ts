@@ -270,28 +270,12 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       const outcome = await classifyOutcome(deps, handle, waitResult, runId);
       assertRunStatusTransition("running", outcome.status);
       
-      let s3ReportKey: string | null = null;
-      if (outcome.reportPath) {
-        try {
-          const { readFile } = await import("node:fs/promises");
-          const { createS3Client } = await import("../logs/s3-client");
-          const { PutObjectCommand } = await import("@aws-sdk/client-s3");
-          const s3 = createS3Client(deps.env);
-          const body = await readFile(outcome.reportPath);
-          const key = `reports/${runId}/sft-report.json`;
-          await s3.send(new PutObjectCommand({
-            Bucket: deps.env.S3_BUCKET,
-            Key: key,
-            Body: body,
-            ContentType: "application/json"
-          }));
-          s3ReportKey = key;
-        } catch (err) {
-          deps.logger.child({ runId }).warn("failed to upload report to S3", err);
-        }
-      }
 
       const finishedAt = new Date();
+      let s3ReportKey: string | null | undefined;
+      if (outcome.report && deps.uploadReport) {
+        s3ReportKey = await deps.uploadReport(runId, outcome.report);
+      }
 
       // M3b: derive findings from the report before persisting the outcome.
       // Best-effort by contract: a parse or insert hiccup must not fail a
@@ -370,21 +354,6 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       // M4b: archive the validated report to S3 (best-effort; never fails the run).
       // The report lives at outcome.reportPath after extractAndValidateReport
       // moved it out of the per-run staging directory.
-      let s3ReportKey: string | null = null;
-      if (outcome.reportPath) {
-        try {
-          const s3 = createS3Client(deps.env);
-          const key = `reports/${runId}/sft-report.json`;
-          await s3.send(
-            new PutObjectCommand({
-              Bucket: deps.env.S3_BUCKET,
-              Key: key,
-              Body: await fs.readFile(outcome.reportPath),
-              ContentType: "application/json",
-            }),
-          );
-          s3ReportKey = key;
-          logger.info(`archived report to s3://${deps.env.S3_BUCKET}/${key}`);
         } catch (error) {
           logger.error("failed to archive report to S3", error);
         }
@@ -398,7 +367,6 @@ export function createRunJob(deps: RunJobDeps): RunJob {
         finishedAt,
         buildMinutes: buildMinutes(startedAt, finishedAt),
         s3LogKey: flushed.s3Key,
-        s3ReportKey,
         logArchive:
           flushed.stdoutBytes > 0 || flushed.stderrBytes > 0
             ? { stdoutBytes: flushed.stdoutBytes, stderrBytes: flushed.stderrBytes }

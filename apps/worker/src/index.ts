@@ -9,6 +9,7 @@ import { createRunJob } from "./job/run-job";
 import { attachAndStream } from "./logs/attach";
 import { createLogArchiver } from "./logs/archiver";
 import { createLogPublisher } from "./logs/publisher";
+import { createReportUploader } from "./report/upload";
 import { extractAndValidateReport } from "./report/handler";
 import { createRunsWorker } from "./queue/runs.worker";
 import { createRunRepository } from "./run-repository";
@@ -56,6 +57,7 @@ async function main(): Promise<void> {
     logger,
     publisher: logPublisher,
     createArchiver: (runId) => createLogArchiver({ s3Client, bucket: env.S3_BUCKET, runId, logger }),
+    uploadReport: createReportUploader({ s3Client, bucket: env.S3_BUCKET, logger }),
     attach: ({ containerId, runId, archiver }) =>
       attachAndStream(docker, containerId, runId, logPublisher, logger, archiver),
     mintToken: (installationId) => mintInstallationToken(installationId, env),

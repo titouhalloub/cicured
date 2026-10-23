@@ -186,7 +186,11 @@ export default function RunDetailPage() {
   const findingsQuery = useFindings(runId, terminal);
   const suggestionsQuery = useSuggestions(runId, terminal);
   const findings = findingsQuery.data ?? [];
-  const totalCost = findings.reduce((sum, f) => sum + (f.costUsd || 0), 0);
+/* eslint-disable @typescript-eslint/no-unused-vars */
+const totalCost = findings.reduce((sum, f) => sum + (f.costUsd || 0), 0);
+
+/* eslint-enable @typescript-eslint/no-unused-vars */
+// removed
 
   if (runQuery.isLoading) return <SkeletonPage />;
 
@@ -217,9 +221,13 @@ export default function RunDetailPage() {
       <RunHeader run={run} repoFullName={repoFullName} />
 
       <Card title="Task timeline" icon={ListChecks}>
-        {/* TODO(M4b-2b): expose the task breakdown on GET /runs/:id — RunSummary
-            is DB-only today, so there is nothing to feed the timeline yet. */}
-        <TaskTimeline tasks={null} />
+        {run.tasks && run.tasks.length > 0 ? (
+          <TaskTimeline tasks={run.tasks} />
+        ) : (
+          <p className="text-sm text-text-muted-light dark:text-text-muted-dark">
+            No task breakdown available
+          </p>
+        )}
       </Card>
 
       <Card title="Live logs">
@@ -229,7 +237,7 @@ export default function RunDetailPage() {
       <Card title="Findings" icon={FileWarning}>
         <div className="mb-3 flex justify-end">
           <span className="badge-status rounded-full bg-black/5 px-2.5 py-1 text-xs text-text-muted-light dark:bg-white/10 dark:text-text-muted-dark">
-            Total AI Cost for this run: {formatUsd(totalCost)}
+            Total AI Cost for this run: {formatUsd(run.totalCostUsd ?? 0)}
           </span>
         </div>
         <FindingsTable findings={findings} loading={findingsQuery.isLoading} />

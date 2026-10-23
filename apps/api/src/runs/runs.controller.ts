@@ -1,4 +1,5 @@
 import { Throttle } from "@nestjs/throttler";
+import { NotFoundException } from "@nestjs/common";
 import {
   Body,
   Controller,
@@ -57,10 +58,34 @@ export class RunsController {
     return { items: items.map(toRunSummary), total, limit: query.limit, offset: query.offset };
   }
 
-  /** GET /runs/:id */
+  /** GET /runs/:id — with task breakdown from the archived report when available. */
   @Get("runs/:id")
-  async getRun(@CurrentUser() user: UserRow, @Param("id") runId: string): Promise<RunSummary> {
-    return toRunSummary(await this.runsService.getOwnedRun(user, runId));
+  async getRun(
+    @CurrentUser() user: UserRow,
+    @Param("id") runId: string,
+  ): Promise<RunSummary> {
+    const row = await this.runsService.getOwnedRun(user, runId);
+    const summary = toRunSummary(row);
+    if (row.s3ReportKey) {
+      const tasks = await this.runsService.getReportTasks(row.s3ReportKey);
+      if (tasks) {
+        return { ...summary, tasks };
+      }
+    }
+    return summary;
+  }
+
+  /** GET /runs/:id/report — presigned URL to the archived report (M4b). */
+  @Get("runs/:id/report")
+  async getReport(
+    @CurrentUser() user: UserRow,
+    @Param("id") runId: string,
+  ): Promise<{ url: string }> {
+    const url = await this.runsService.getPresignedReportUrl(user, runId);
+    if (!url) {
+      throw new NotFoundException("report not found");
+    }
+    return { url };
   }
 
   /** GET /runs/:id/findings — parser output for a run (Spec §4 step 8). */

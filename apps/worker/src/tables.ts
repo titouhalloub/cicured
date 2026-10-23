@@ -46,6 +46,8 @@ export const runs = pgTable("runs", {
   finishedAt: timestamp("finished_at", { withTimezone: true }),
   buildMinutes: integer("build_minutes"),
   s3_log_key: text("s3_log_key"),
+  /** M4b: S3 prefix for the archived report (`reports/<runId>/sft-report.json`). */
+  s3_report_key: text("s3_report_key"),
 });
 
 /**

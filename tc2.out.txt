@@ -1,0 +1,25 @@
+packages/schemas typecheck$ tsc --noEmit
+packages/runner typecheck$ tsc --noEmit
+packages/runner typecheck: Done
+packages/schemas typecheck: Done
+apps/web typecheck$ tsc --noEmit
+packages/parser typecheck$ tsc --noEmit
+packages/parser typecheck: Done
+apps/worker typecheck$ tsc --noEmit
+packages/cli typecheck$ tsc --noEmit
+apps/api typecheck$ tsc --noEmit
+apps/web typecheck: app/(app)/app/page.tsx(173,13): error TS2304: Cannot find name 'breakdown'.
+apps/web typecheck: app/(app)/app/page.tsx(190,18): error TS2304: Cannot find name 'breakdown'.
+apps/web typecheck: app/(app)/app/page.tsx(190,33): error TS7006: Parameter 'row' implicitly has an 'any' type.
+apps/web typecheck: Failed
+[ELIFECYCLE] Command failed with exit code 1.
+packages/cli typecheck: Failed
+[ELIFECYCLE] Command failed with exit code 1.
+apps/worker typecheck: Failed
+[ELIFECYCLE] Command failed with exit code 1.
+apps/api typecheck: Failed
+[ELIFECYCLE] Command failed with exit code 1.
+Error: ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL
+
+  × "pnpm recursive run" failed in E:\cicured\apps\web
+

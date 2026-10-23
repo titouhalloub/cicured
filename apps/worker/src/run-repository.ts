@@ -83,6 +83,11 @@ export interface FinalizeRunInput {
    */
   s3LogKey?: string | null;
   /**
+   * M4b: S3 key of the archived report (`reports/<runId>/sft-report.json`),
+   * or null when archival failed/skipped.
+   */
+  s3ReportKey?: string | null;
+  /**
    * M2b-2: per-stream byte sizes for the `logs` segment rows. Null/undefined
    * skips the insert; a stream with 0 bytes produces no row.
    */
@@ -145,6 +150,8 @@ export function createRunRepository(db: Database): RunRepository {
           buildMinutes: input.buildMinutes,
           // M2a callers omit s3LogKey; only touch the column when provided.
           ...(input.s3LogKey !== undefined ? { s3_log_key: input.s3LogKey } : {}),
+          // M4b: only touch s3_report_key when provided.
+          ...(input.s3ReportKey !== undefined ? { s3_report_key: input.s3ReportKey } : {}),
         })
         .where(eq(runs.id, runId))
         .returning({ id: runs.id });

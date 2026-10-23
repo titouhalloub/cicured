@@ -6,13 +6,18 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import type { S3Client } from "@aws-sdk/client-s3";
 import {
   assertRunStatusTransition,
   type CreateRunInput,
   type ListRunsQuery,
   type RunStatus,
+  type SftTaskV2,
 } from "@sft/schemas";
-import { and, asc, count, desc, eq, gte, inArray, sum } from "drizzle-orm";
+import { parseSftReport } from "@sft/schemas";
+import { and, asc, count, desc, eq, gte, inArray, sql, sum } from "drizzle-orm";
 import {
   DRIZZLE,
   findings,
@@ -25,6 +30,7 @@ import {
   type RunRow,
   type UserRow,
 } from "../db";
+import { AppConfig } from "../config/app-config.service";
 import { ProjectsService } from "../projects/projects.service";
 import { RunsQueue } from "../queue/runs-queue.service";
 
@@ -87,6 +93,8 @@ function startOfUtcMonth(now: Date = new Date()): Date {
 export class RunsService {
   constructor(
     @Inject(DRIZZLE) private readonly db: Database,
+    @Inject("S3_CLIENT") private readonly s3: S3Client,
+    private readonly config: AppConfig,
     private readonly queue: RunsQueue,
     private readonly projects: ProjectsService,
   ) {}
@@ -206,12 +214,18 @@ export class RunsService {
     }
   }
 
-  async getOwnedRun(user: UserRow, runId: string): Promise<RunRow> {
+  async getOwnedRun(user: UserRow, runId: string): Promise<RunRow & { totalCostUsd: number }> {
     const [row] = await this.db.select().from(runs).where(eq(runs.id, runId)).limit(1);
     if (!row) throw new NotFoundException("run not found");
     const project = await this.projects.findOwned(user.id, row.projectId);
     if (!project) throw new NotFoundException("run not found");
-    return row;
+
+    const [costRow] = await this.db
+      .select({ totalCostUsd: sum(llmCalls.totalCostUsd) })
+      .from(llmCalls)
+      .where(eq(llmCalls.runId, runId));
+
+    return { ...row, totalCostUsd: usdToNumber(costRow?.totalCostUsd ?? null) };
   }
 
   /**
@@ -303,6 +317,54 @@ export class RunsService {
       .set({ accepted })
       .where(eq(suggestions.id, suggestionId));
     return { ok: true };
+  }
+
+  /** M4b: presigned GET URL for the archived report, or null when not archived. */
+  async getPresignedReportUrl(
+    user: UserRow,
+    runId: string,
+    ttlSeconds = 900,
+  ): Promise<string | null> {
+    let run;
+    try {
+      run = await this.getOwnedRun(user, runId);
+    } catch {
+      return null;
+    }
+    if (!run.s3ReportKey) return null;
+
+    const command = new GetObjectCommand({
+      Bucket: this.config.env.S3_BUCKET,
+      Key: run.s3ReportKey,
+      ResponseContentDisposition: `attachment; filename="${runId}-report.json"`,
+    });
+
+    return getSignedUrl(this.s3, command, { expiresIn: ttlSeconds });
+  }
+
+  /** M4b: fetch the archived report from S3 and return its task breakdown. */
+  async getReportTasks(s3ReportKey: string): Promise<SftTaskV2[] | null> {
+    try {
+      const response = await this.s3.send(
+        new GetObjectCommand({
+          Bucket: this.config.env.S3_BUCKET,
+          Key: s3ReportKey,
+        }),
+      );
+      if (!response.Body) return null;
+      // response.Body is a stream (Node Readable or web ReadableStream); both
+      // are async-iterable, so read chunks generically.
+      const chunks: Uint8Array[] = [];
+      for await (const chunk of response.Body as unknown as AsyncIterable<Uint8Array>) {
+        chunks.push(chunk);
+      }
+      const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
+      const parsed = parseSftReport(text);
+      if (!parsed.ok) return null;
+      return parsed.report.tasks;
+    } catch {
+      return null;
+    }
   }
 
   async listProjectRuns(

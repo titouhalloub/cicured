@@ -3,6 +3,7 @@ import {
   Controller,
   Headers,
   HttpCode,
+  Logger,
   Post,
   Req,
   UnauthorizedException,
@@ -20,6 +21,8 @@ import { WebhooksService } from "./webhooks.service";
  */
 @Controller("webhooks")
 export class WebhooksController {
+  private readonly logger = new Logger(WebhooksController.name);
+
   constructor(private readonly webhooks: WebhooksService) {}
 
   @Post("github")
@@ -43,7 +46,11 @@ export class WebhooksController {
 
     if (event === "push") return this.webhooks.handleGithubPush(raw);
     // opened + synchronize: a pushed fix re-triggers the diff review.
-    if (event === "pull_request") return this.webhooks.handleGithubPullRequest(raw);
+    if (event === "pull_request") {
+      const result = await this.webhooks.handleGithubPullRequest(raw);
+      this.logger.log(`Webhook result: ${JSON.stringify(result)}`);
+      return result;
+    }
 
     return { status: "ignored" };
   }

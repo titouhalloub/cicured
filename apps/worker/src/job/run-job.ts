@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import type { FindingsWithFingerprint } from "@sft/parser";
 import {
   assertRunStatusTransition,
@@ -24,6 +25,7 @@ import type { LogPublisher } from "../logs/publisher";
 import type { RunRepository } from "../run-repository";
 import type { SandboxHandle, SandboxLauncher, SandboxWaitResult } from "../sandbox/launcher";
 import type { LogArchiver } from "../logs/archiver";
+import { createS3Client } from "../logs/s3-client";
 
 export interface ReportExtractionRequest {
   containerId: string;
@@ -62,6 +64,8 @@ export interface RunJobDeps {
   attach: AttachFn;
   /** M2b-2: log archiver for S3 uploads. Run-scoped via createArchiver. */
   createArchiver: (runId: string) => LogArchiver;
+  /** M4b: uploader for the archived run report to S3. */
+  uploadReport?: (runId: string, report: SftReportV2) => Promise<string | null>;
 }
 
 export interface RunJobResult {
@@ -341,6 +345,29 @@ export function createRunJob(deps: RunJobDeps): RunJob {
         logger.info(`AI stage complete: ${drafts.length} suggestion(s) for run ${runId}`);
       }
 
+      // M4b: archive the validated report to S3 (best-effort; never fails the run).
+      // The report lives at outcome.reportPath after extractAndValidateReport
+      // moved it out of the per-run staging directory.
+      let s3ReportKey: string | null = null;
+      if (outcome.reportPath) {
+        try {
+          const s3 = createS3Client(deps.env);
+          const key = `reports/${runId}/sft-report.json`;
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: deps.env.S3_BUCKET,
+              Key: key,
+              Body: await fs.readFile(outcome.reportPath),
+              ContentType: "application/json",
+            }),
+          );
+          s3ReportKey = key;
+          logger.info(`archived report to s3://${deps.env.S3_BUCKET}/${key}`);
+        } catch (error) {
+          logger.error("failed to archive report to S3", error);
+        }
+      }
+
       await deps.repository.finalizeRun(runId, {
         status: outcome.status,
         exitCode: outcome.exitCode,
@@ -348,6 +375,7 @@ export function createRunJob(deps: RunJobDeps): RunJob {
         finishedAt,
         buildMinutes: buildMinutes(startedAt, finishedAt),
         s3LogKey: flushed.s3Key,
+        s3ReportKey,
         logArchive:
           flushed.stdoutBytes > 0 || flushed.stderrBytes > 0
             ? { stdoutBytes: flushed.stdoutBytes, stderrBytes: flushed.stderrBytes }

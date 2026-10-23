@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isIsoDateTime, UUID_PATTERN } from "./common";
+import { SftTaskV2 } from "./report";
 import { FailureKind, RunStatus, RunTrigger } from "./run";
 
 /** `<owner>/<repo>` — GitHub allows alphanumerics plus `- _ .` in both parts. */
@@ -64,6 +65,11 @@ export const RunSummary = z.object({
   startedAt: Iso.nullable(),
   finishedAt: Iso.nullable(),
   buildMinutes: z.number().int().nullable(),
+  /** Task breakdown from the validated report (S3). Populated only by GET /runs/:id;
+   * left undefined by the list endpoint to avoid per-run S3 fetches. */
+  tasks: z.array(SftTaskV2).optional(),
+  /** Sum of LLM call costs for this run, from the llm_calls ledger. */
+  totalCostUsd: z.number().optional(),
 });
 export type RunSummary = z.infer<typeof RunSummary>;
 

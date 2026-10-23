@@ -264,6 +264,9 @@ export class WebhooksService {
     // no-findings early return and before the GitHub call so a review we
     // already paid for is never left unbilled, and best-effort so a DB hiccup
     // can never lose the review itself.
+    this.logger.log(
+      `Attempting to insert llm_calls with costUsd=${costUsd}, tokens=${inputTokens}/${outputTokens}`,
+    );
     try {
       await this.db.insert(llmCalls).values({
         userId: project.userId,
@@ -280,8 +283,13 @@ export class WebhooksService {
         // numeric(12,6) is typed as string by drizzle (see UsageService).
         totalCostUsd: String(costUsd),
         durationMs: Date.now() - reviewStartedAt,
+        category: "Code Review",
+        ruleId: "pr-diff-review",
       });
     } catch (error) {
+      this.logger.error(
+        `FAILED TO SAVE LLM CALLS TO DB: ${error instanceof Error ? error.stack : String(error)}`,
+      );
       const reason = error instanceof Error ? error.message : "unknown error";
       this.logger.warn(
         `could not persist review usage for ${repository.full_name}#${prNumber}: ${reason}`,

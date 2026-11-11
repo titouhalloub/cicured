@@ -335,7 +335,7 @@ export function createRunJob(deps: RunJobDeps): RunJob {
         const drafts = await generateSuggestions(
           findingsWithId,
           async (finding) => {
-            if (!deps.getFindingSnippet || !token) return "";
+            if (!deps.getFindingSnippet || !token || !loaded.run.sha) return "";
             return deps.getFindingSnippet({
               repoFullName: loaded.project.repoFullName,
               sha: loaded.run.sha,

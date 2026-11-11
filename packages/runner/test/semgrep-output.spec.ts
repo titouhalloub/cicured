@@ -20,7 +20,7 @@ if (!outputArg) {
 }
 const results = Array.from({ length: 501 }, (_, index) => ({
   check_id: "javascript.lang.security.test-rule",
-  path: `src/file-${index}.ts`,
+  path: "src/file-" + index + ".ts",
   start: { line: index + 1, col: 2 },
   extra: { message: "Potential security issue", severity: "ERROR" },
 }));

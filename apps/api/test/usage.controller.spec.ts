@@ -195,29 +195,33 @@ describe("UsageService.insertLlmCalls", () => {
 
 describe("UsageService.getSummary", () => {
   interface SummaryDbRows {
-    totals: { totalCalls: number; totalCostUsd: string | null };
+    totals: { totalCalls: number; totalCostUsd: string | null; tokensAvoided: string | null };
     topModels: { model: string; calls: number; costUsd: string | null }[];
+    byCategory: { category: string | null; calls: number; costUsd: string | null }[];
+    breakdown: { category: string | null; ruleId: string | null; bugCount: number; totalCostUsd: string | null }[];
   }
 
-  /**
-   * Drizzle select-chain stub for the two summary queries: the totals query
-   * ends at .where(), the grouped one at .limit(). Fields differ (only the
-   * grouped query selects `model`), so one stub can route both.
-   */
+  /** Query-chain stub covering the totals, grouped category, model and rule queries. */
   function makeSummaryDb(rows: SummaryDbRows): Database {
+    const grouped = (result: unknown[]) => {
+      const chain: any = {};
+      chain.groupBy = () => chain;
+      chain.orderBy = () => chain;
+      chain.limit = async (n: number) => result.slice(0, n);
+      chain.then = (resolve: (value: unknown[]) => unknown, reject?: (reason: unknown) => unknown) =>
+        Promise.resolve(result).then(resolve, reject);
+      return chain;
+    };
+
     const select = vi.fn((fields: Record<string, unknown>) => {
       if ("model" in fields) {
-        return {
-          from: () => ({
-            where: () => ({
-              groupBy: () => ({
-                orderBy: () => ({
-                  limit: async (n: number) => rows.topModels.slice(0, n),
-                }),
-              }),
-            }),
-          }),
-        };
+        return { from: () => ({ where: () => grouped(rows.topModels) }) };
+      }
+      if ("ruleId" in fields) {
+        return { from: () => ({ where: () => grouped(rows.breakdown) }) };
+      }
+      if ("category" in fields) {
+        return { from: () => ({ where: () => grouped(rows.byCategory) }) };
       }
       return { from: () => ({ where: async () => [rows.totals] }) };
     });
@@ -226,35 +230,49 @@ describe("UsageService.getSummary", () => {
 
   it("aggregates totals and coerces numeric-string sums to numbers", async () => {
     const db = makeSummaryDb({
-      totals: { totalCalls: 2, totalCostUsd: "0.0007" },
+      totals: { totalCalls: 2, totalCostUsd: "0.0007", tokensAvoided: "1000" },
       topModels: [
         { model: "claude-sonnet-4-5", calls: 1, costUsd: "0.000388" },
         { model: "gpt-4o", calls: 1, costUsd: "0.000312" },
       ],
+      byCategory: [],
+      breakdown: [],
     });
     const service = new UsageService(db);
 
     await expect(service.getSummary(user)).resolves.toEqual({
       totalCalls: 2,
       totalCostUsd: 0.0007,
+      totalTokensAvoided: 1000,
+      totalEstimatedSavingsUsd: 0.015,
+      netRoi: 0.015 / 0.0007,
+      byCategory: [],
       topModels: [
         { model: "claude-sonnet-4-5", calls: 1, costUsd: 0.000388 },
         { model: "gpt-4o", calls: 1, costUsd: 0.000312 },
       ],
+      breakdown: [],
     });
   });
 
-  it("returns zeros and an empty list for a user with no calls", async () => {
+  it("returns zeros and empty lists for a user with no calls", async () => {
     const db = makeSummaryDb({
-      totals: { totalCalls: 0, totalCostUsd: null },
+      totals: { totalCalls: 0, totalCostUsd: null, tokensAvoided: null },
       topModels: [],
+      byCategory: [],
+      breakdown: [],
     });
     const service = new UsageService(db);
 
     await expect(service.getSummary(user)).resolves.toEqual({
       totalCalls: 0,
       totalCostUsd: 0,
+      totalTokensAvoided: 0,
+      totalEstimatedSavingsUsd: 0,
+      netRoi: 0,
+      byCategory: [],
       topModels: [],
+      breakdown: [],
     });
   });
 });

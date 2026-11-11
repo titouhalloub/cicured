@@ -328,6 +328,12 @@ function collectSemgrepFindings(stdout, timedOut, spawnError) {
       )];
     }
     if (spawnError) return undefined;
+    if (existsSync(outputPath) && statSync(outputPath).size > 20 * 1024 * 1024) {
+      return [semgrepDiagnostic(
+        "sft-semgrep-output-too-large",
+        "Semgrep JSON output exceeded Cicured's 20 MB safety limit; security findings are unavailable for this run."
+      )];
+    }
     const raw = existsSync(outputPath) ? readFileSync(outputPath, "utf8") : stdout;
     return normalizeSemgrepOutput(raw);
   } catch {

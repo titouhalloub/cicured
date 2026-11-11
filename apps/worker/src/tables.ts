@@ -36,7 +36,7 @@ export const projects = pgTable("projects", {
 export const runs = pgTable("runs", {
   id: uuid("id").primaryKey(),
   projectId: uuid("project_id").notNull(),
-  sha: text("sha").notNull(),
+  sha: text("sha"),
   branch: text("branch").notNull(),
   trigger: runTriggerEnum("trigger").notNull(),
   status: runStatusEnum("status").notNull().default("queued"),

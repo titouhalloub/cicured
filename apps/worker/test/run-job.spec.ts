@@ -633,6 +633,29 @@ describe("run-job code graph plumbing (Phase 3c-2)", () => {
     );
   });
 
+  it("prefers the runner's scanned SHA when the run row has no SHA", async () => {
+    const deps = await prepareAI("valid");
+    const scannedSha = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
+    deps.loadRunWithProject = vi.fn(async () => ({
+      run: { ...makeRun(), sha: null },
+      project: makeProject(),
+    }));
+    deps.extractReport = vi.fn(async () => ({
+      ...failingReport(),
+      gitSha: scannedSha,
+    }));
+
+    await createRunJob(deps)(RUN_ID);
+
+    expect(vi.mocked(deps.getFindingSnippet!)).toHaveBeenCalledWith({
+      repoFullName: "acme/web",
+      sha: scannedSha,
+      file: "src/x.ts",
+      line: 3,
+      token: TOKEN,
+    });
+  });
+
   it("reads sft-graph.json from the staging dir when present", async () => {
     const deps = await prepareAI("valid");
 

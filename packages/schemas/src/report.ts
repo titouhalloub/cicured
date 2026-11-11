@@ -77,6 +77,8 @@ export const SftReportV2 = z.object({
   version: z.literal(2),
   finishedAt: isoDateTime,
   runnerError: z.string().nullable(),
+  /** Exact repository revision scanned by the runner, when Git metadata exists. */
+  gitSha: z.string().regex(/^[0-9a-f]{40,64}$/i).optional(),
   warnings: z.array(z.string()),
   summary: SftSummaryV2,
   tasks: z.array(SftTaskV2),

@@ -51,6 +51,7 @@ export function parseSemgrep(
     parsed === null ||
     !Array.isArray((parsed as { results?: unknown }).results)
   ) {
+    warnings?.push("semgrep: missing results array");
     return [];
   }
   const findings: ParsedFinding[] = [];

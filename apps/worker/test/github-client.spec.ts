@@ -52,9 +52,28 @@ describe("WorkerGitHubClient.getFileSnippet", () => {
 
     await expect(client.getFileSnippet("acme", "web", "../secrets", "sha", 1, "token"))
       .resolves.toBe("");
+    await expect(client.getFileSnippet("acme", "web", "foo/../bar", "sha", 1, "token"))
+      .resolves.toBe("");
+    await expect(client.getFileSnippet("acme", "web", "foo/./bar", "sha", 1, "token"))
+      .resolves.toBe("");
     await expect(client.getFileSnippet("acme", "web", "/etc/passwd", "sha", 1, "token"))
       .resolves.toBe("");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("clips exceptionally long source lines before they reach the prompt", async () => {
+    const source = "x".repeat(5_000);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      type: "file",
+      encoding: "base64",
+      size: Buffer.byteLength(source),
+      content: Buffer.from(source, "utf8").toString("base64"),
+    }), { status: 200 })));
+    const client = createGitHubClient(env);
+
+    const snippet = await client.getFileSnippet("acme", "web", "src/large.ts", "sha", 1, "token");
+    expect(snippet.length).toBeLessThan(700);
+    expect(snippet).toContain("[line truncated]");
   });
 
   it("returns an empty snippet when the file is unavailable at the reviewed commit", async () => {

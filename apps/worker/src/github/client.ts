@@ -4,10 +4,11 @@ import { mintInstallationToken, type GitHubAppCredentials } from "./token";
 const REQUEST_TIMEOUT_MS = 15_000;
 
 /**
- * Minimal GitHub REST client for the worker (v2 combined pipeline): posts the
- * post-run diagnosis comment back onto the PR. The diff review itself lives in
- * the API (apps/api/src/auth/github.client.ts) — mirrored here only as far as
- * needed, because the worker must never import the NestJS app (Spec §0).
+ * Minimal GitHub REST client for the worker (v2 combined pipeline): reads
+ * source context at the reviewed commit and posts post-run diagnosis comments.
+ * The diff review itself lives in the API (apps/api/src/auth/github.client.ts)
+ * — mirrored here only as far as needed, because the worker must never import
+ * the NestJS app (Spec §0).
  */
 export interface WorkerGitHubClient {
   /**

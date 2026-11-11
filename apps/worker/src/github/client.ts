@@ -87,8 +87,8 @@ export function createGitHubClient(env: GitHubAppCredentials): WorkerGitHubClien
         return "";
       }
 
-      const source = Buffer.from(body.content.replace(/\\s/g, ""), "base64").toString("utf8");
-      const lines = source.split(/\\r?\\n/);
+      const source = Buffer.from(body.content.replace(/\s/g, ""), "base64").toString("utf8");
+      const lines = source.split(/\r?\n/);
       const firstLine = Math.max(1, line - 20);
       const lastLine = Math.min(lines.length, line + 20);
       return lines

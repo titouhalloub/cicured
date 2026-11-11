@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { CryptoService } from "../src/common/crypto.service";
 import type { AppConfig } from "../src/config/app-config.service";
-import { projects, webhookDeliveries } from "../src/db";
+import { llmCalls, projects, webhookDeliveries } from "../src/db";
 import type { Database } from "../src/db";
 import type { RunsQueue } from "../src/queue/runs-queue.service";
 import type { GitHubClient } from "../src/auth/github.client";
@@ -26,6 +26,30 @@ const PROJECT = {
   installationIdEnc: "v1:iv:tag:ct",
 };
 
+const PR_BODY = Buffer.from(JSON.stringify({
+  action: "opened",
+  number: 17,
+  pull_request: {
+    head: {
+      sha: "0123456789abcdef0123456789abcdef01234567",
+      ref: "feature/security-fix",
+    },
+  },
+  repository: { full_name: "acme/web" },
+  installation: { id: 12345 },
+}), "utf8");
+
+const PR_DIFF = [
+  "diff --git a/src/users.ts b/src/users.ts",
+  "index 1111111..2222222 100644",
+  "--- a/src/users.ts",
+  "+++ b/src/users.ts",
+  "@@ -1,1 +1,1 @@",
+  "-const query = safe(id);",
+  "+const query = unsafe(id);",
+  "",
+].join("\n");
+
 interface DbOptions {
   /** Rows returned by the projects lookup. */
   projectRows?: unknown[];
@@ -39,7 +63,9 @@ interface DbOptions {
 
 /** Drizzle double covering exactly the four queries WebhooksService issues. */
 function dbDouble(options: DbOptions = {}) {
+  const insertedTables: unknown[] = [];
   return {
+    insertedTables,
     select: vi.fn(() => ({
       from: vi.fn((table: unknown) => ({
         where: vi.fn(() => ({
@@ -50,7 +76,9 @@ function dbDouble(options: DbOptions = {}) {
         })),
       })),
     })),
-    insert: vi.fn((table: unknown) => ({
+    insert: vi.fn((table: unknown) => {
+      insertedTables.push(table);
+      return {
       values: vi.fn(() => {
         if (table === webhookDeliveries) {
           // Awaiting the values() builder is what executes the insert.
@@ -70,7 +98,8 @@ function dbDouble(options: DbOptions = {}) {
           returning: vi.fn(async () => options.insertedRows ?? [{ id: RUN_ID }]),
         };
       }),
-    })),
+    };
+    }),
   };
 }
 
@@ -267,4 +296,31 @@ describe("WebhooksService", () => {
       });
     });
   });
+  describe("handleGithubPullRequest", () => {
+    it("reports total provider failure instead of presenting it as a clean PR", async () => {
+      const db = dbDouble({
+        projectRows: [{ ...PROJECT, userId: "33333333-3333-4333-8333-333333333333" }],
+        dedupRows: [],
+        insertedRows: [{ id: RUN_ID }],
+      });
+      const github = githubDouble();
+      github.getPullRequestDiff.mockResolvedValue(PR_DIFF);
+      const llm = llmDouble();
+      llm.reviewHunk.mockRejectedValue(new Error("OpenRouter responded 401"));
+
+      const { service, queue } = makeService(db, { github, llm });
+      const result = await service.handleGithubPullRequest(PR_BODY);
+
+      expect(result).toEqual({ status: "review-failed", runId: RUN_ID });
+      expect(llm.reviewHunk).toHaveBeenCalledTimes(1);
+      expect(github.createPullRequestReview).not.toHaveBeenCalled();
+      expect(db.insertedTables).not.toContain(llmCalls);
+      expect(queue.enqueueRun).toHaveBeenCalledWith({
+        runId: RUN_ID,
+        projectId: PROJECT.id,
+        prNumber: 17,
+      });
+    });
+  });
+
 });

@@ -112,7 +112,7 @@ function makeDbStub(
   const rows = options.rows ?? [];
 
   const terminal = {
-    groupBy: (...args: unknown[]) => terminal,
+    groupBy: (..._args: unknown[]) => terminal,
     orderBy: (...args: unknown[]) => {
       calls.orderBy.push(args);
       return Promise.resolve(rows);

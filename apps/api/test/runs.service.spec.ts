@@ -98,6 +98,7 @@ function makeDbStub(
     updated?: RunRow;
     ownedRows?: unknown[];
     rows?: unknown[];
+    costRow?: { totalCostUsd: string | null };
   } = {},
 ) {
   const calls = {
@@ -111,11 +112,15 @@ function makeDbStub(
   const rows = options.rows ?? [];
 
   const terminal = {
+    groupBy: (...args: unknown[]) => terminal,
     orderBy: (...args: unknown[]) => {
       calls.orderBy.push(args);
       return Promise.resolve(rows);
     },
     limit: () => Promise.resolve([ownedQueue.shift()]),
+    // getOwnedRun's aggregate query is awaited directly (without limit()).
+    then: (resolve: (value: unknown[]) => unknown, reject?: (reason: unknown) => unknown) =>
+      Promise.resolve([options.costRow ?? { totalCostUsd: null }]).then(resolve, reject),
   };
   const joined = {
     innerJoin: () => {

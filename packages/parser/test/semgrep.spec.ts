@@ -155,4 +155,15 @@ describe("parseTask structured Semgrep findings", () => {
       ruleId: "sft-semgrep-output-truncated",
     });
   });
+
+  it("surfaces malformed custom Semgrep output instead of returning a clean result", () => {
+    const findings = parseTask({ ...baseTask, stdout: "{not json" });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      severity: "warning",
+      category: "lint",
+      ruleId: "sft-semgrep-output-invalid",
+    });
+  });
 });

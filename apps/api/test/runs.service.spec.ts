@@ -283,12 +283,16 @@ describe("RunsService.createManualRun (Spec §14 acceptance: queued row + BullMQ
 });
 
 describe("RunsService.createManualRun guards (M5 §9)", () => {
-  function makeService(db: Database, project: ProjectRow | null = makeProjectRow()) {
+  function makeService(
+    db: Database,
+    project: ProjectRow | null = makeProjectRow(),
+    config: AppConfig = { isProduction: true } as AppConfig,
+  ) {
     const enqueued: Array<{ runId: string; projectId: string }> = [];
     const service = new RunsService(
       db,
       {} as unknown as S3Client,
-      {} as unknown as AppConfig,
+      config,
       {
         enqueueRun: (data: { runId: string; projectId: string }) => {
           enqueued.push(data);
@@ -371,6 +375,30 @@ describe("RunsService.createManualRun guards (M5 §9)", () => {
 
     expect(calls.insertedValues).toHaveLength(0);
     expect(enqueued).toHaveLength(0);
+  });
+
+  it("does not enforce monthly build-minute quotas outside production", async () => {
+    const { db, calls } = makeDbStub({
+      ownedRows: [{ value: 0 }],
+      inserted: makeRunRow(),
+    });
+
+    const { service, enqueued } = makeService(
+      db,
+      makeProjectRow(),
+      { isProduction: false } as AppConfig,
+    );
+    const row = await service.createManualRun(
+      { id: USER_ID, plan: "free" } as never,
+      PROJECT_ID,
+      {},
+    );
+
+    expect(row.status).toBe("queued");
+    // Only the concurrency query ran; local development never reads monthly usage.
+    expect(calls.where).toHaveLength(1);
+    expect(calls.insertedValues).toHaveLength(1);
+    expect(enqueued).toHaveLength(1);
   });
 
   it("allows a run when the user is still inside their plan quota", async () => {

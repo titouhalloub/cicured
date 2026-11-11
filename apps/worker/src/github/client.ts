@@ -94,7 +94,7 @@ export function createGitHubClient(env: GitHubAppCredentials): WorkerGitHubClien
       return lines
         .slice(firstLine - 1, lastLine)
         .map((text, index) => `${firstLine + index}: ${text}`)
-        .join("\\n");
+        .join("\n");
     },
     async postPullRequestComment(owner, repo, prNumber, installationId, body) {
       // Minted per comment (1h TTL, clone-less use); registered so the log

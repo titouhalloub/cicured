@@ -3,7 +3,7 @@
 // Contract: writes sft-report.json in cwd; exit 0 = all tasks passed, 1 = >=1 task failed, 2 = runner crash.
 // Report schema stays version 2; new fields are additive: task.skipped, task.truncated, report.warnings.
 import { spawn, spawnSync } from "node:child_process";
-import { writeFileSync, readFileSync, existsSync, statSync, readdirSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync, statSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
@@ -24,6 +24,7 @@ const TASK_TIMEOUT_MS = num(process.env.SFT_TASK_TIMEOUT_MS, 10 * 60 * 1000); //
 const DEADLINE_MS = num(process.env.SFT_DEADLINE_MS, 25 * 60 * 1000);          // whole run (pod budget is 30 min)
 const KILL_GRACE_MS = 5000;
 const TAIL_CHARS = 200000;                                                     // per stream, per task
+const MAX_SEMGREP_FINDINGS = 500;
 
 const warnings = [];
 
@@ -147,7 +148,12 @@ function detectSemgrepTasks() {
       config = RULES_FILE;
     }
   } catch { /* fall through to auto */ }
-  return [{ name: "Security", command: `semgrep --config=${config} --json --no-git-ignore --quiet --metrics=off`, timeout: 300000 }];
+  return [{
+    name: "Security",
+    parser: "semgrep",
+    command: `semgrep --config=${config} --json --no-git-ignore --quiet --metrics=off --output=.sft-semgrep-output.json`,
+    timeout: 300000
+  }];
 }
 
 // Cargo probe (Phase 3d-4): mirrors hasGo() — a module without a runnable
@@ -221,6 +227,103 @@ function mergeConfig(detected) {
   return [...configTasks, ...detected.filter((t) => !claimed.has(t.name))];
 }
 
+// Semgrep's native JSON can be much larger than the bounded task stdout.
+ // Keep only the fields Cicured consumes and cap the result count before the
+ // report is serialized. A diagnostic finding makes any loss visible.
+function semgrepDiagnostic(ruleId, message) {
+  return {
+    severity: "warning",
+    category: "lint",
+    ruleId,
+    file: "sft-dev:semgrep",
+    line: 0,
+    col: 0,
+    message,
+  };
+}
+
+function normalizeSemgrepOutput(raw) {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [semgrepDiagnostic(
+      "sft-semgrep-output-invalid",
+      "Semgrep completed without parseable JSON output; security findings are unavailable for this run."
+    )];
+  }
+  if (!parsed || !Array.isArray(parsed.results)) {
+    return [semgrepDiagnostic(
+      "sft-semgrep-output-invalid",
+      "Semgrep JSON did not contain a results array; security findings are unavailable for this run."
+    )];
+  }
+
+  const findings = [];
+  let invalidResults = 0;
+  for (const result of parsed.results.slice(0, MAX_SEMGREP_FINDINGS)) {
+    const ruleId = typeof result?.check_id === "string" ? result.check_id : "";
+    const file = typeof result?.path === "string" ? result.path : "";
+    const line = result?.start?.line;
+    if (
+      !ruleId || ruleId.length > 300 ||
+      !file || file.length > 1024 ||
+      !Number.isSafeInteger(line) || line < 1
+    ) {
+      invalidResults += 1;
+      continue;
+    }
+    const rawSeverity = String(result?.extra?.severity || "").toUpperCase();
+    const message = typeof result?.extra?.message === "string" && result.extra.message.trim()
+      ? result.extra.message.slice(0, 1000)
+      : `Semgrep rule ${ruleId} matched.`;
+    findings.push({
+      severity: rawSeverity === "ERROR" ? "error" : rawSeverity === "INFO" ? "info" : "warning",
+      category: "lint",
+      ruleId,
+      file,
+      line,
+      col: Number.isSafeInteger(result?.start?.col) && result.start.col >= 0 ? result.start.col : 0,
+      message,
+    });
+  }
+
+  if (parsed.results.length > MAX_SEMGREP_FINDINGS) {
+    findings.push(semgrepDiagnostic(
+      "sft-semgrep-results-truncated",
+      `Semgrep returned ${parsed.results.length} results; Cicured retained the first ${MAX_SEMGREP_FINDINGS}. Review coverage is incomplete.`
+    ));
+  } else if (invalidResults > 0) {
+    findings.push(semgrepDiagnostic(
+      "sft-semgrep-results-invalid",
+      `Semgrep returned ${invalidResults} malformed result(s) that Cicured could not normalize.`
+    ));
+  }
+  return findings;
+}
+
+function collectSemgrepFindings(stdout, timedOut, spawnError) {
+  const outputPath = path.join(process.cwd(), ".sft-semgrep-output.json");
+  try {
+    if (timedOut) {
+      return [semgrepDiagnostic(
+        "sft-semgrep-timeout",
+        "Semgrep timed out; security analysis may be incomplete."
+      )];
+    }
+    if (spawnError) return undefined;
+    const raw = existsSync(outputPath) ? readFileSync(outputPath, "utf8") : stdout;
+    return normalizeSemgrepOutput(raw);
+  } catch {
+    return [semgrepDiagnostic(
+      "sft-semgrep-output-unavailable",
+      "Cicured could not read Semgrep's machine-readable output; security findings are unavailable."
+    )];
+  } finally {
+    try { rmSync(outputPath, { force: true }); } catch {}
+  }
+}
+
 // ── 4. Task execution (streams live, captures tails, kills process group) ──
 function killTree(child) {
   try {
@@ -237,12 +340,18 @@ function killTree(child) {
 
 function runTask(task, timeoutMs) {
   return new Promise((resolve) => {
+    if (task.parser === "semgrep") {
+      try { rmSync(path.join(process.cwd(), ".sft-semgrep-output.json"), { force: true }); } catch {}
+    }
     const startedAt = Date.now();
     console.log(`\n[sft-dev] ▶ ${task.name}: ${task.command}`);
     let out = "", err = "", truncated = false, timedOut = false, settled = false;
     const cap = (s, chunk) => {
       s += chunk;
-      if (s.length > TAIL_CHARS * 2) { s = s.slice(-TAIL_CHARS); truncated = true; }
+      if (s.length > TAIL_CHARS) {
+        s = s.slice(-TAIL_CHARS);
+        truncated = true;
+      }
       return s;
     };
     const child = spawn(task.command, {
@@ -256,11 +365,17 @@ function runTask(task, timeoutMs) {
       if (settled) return; settled = true; clearTimeout(timer);
       const durationMs = Date.now() - startedAt;
       const exitCode = timedOut ? 124 : (typeof code === "number" ? code : (spawnError ? 127 : 1));
+      const skipped = (spawnError || exitCode === 127);
+      const structuredFindings =
+        task.parser === "semgrep" && !skipped
+          ? collectSemgrepFindings(out, timedOut, spawnError)
+          : undefined;
       const result = {
         name: task.name, command: task.command, ...parserFieldsOf(task),
-        success: !(spawnError || exitCode === 127) && !timedOut && code === 0,
-        exitCode, timedOut, skipped: (spawnError || exitCode === 127), truncated, durationMs,
-        stdout: out.slice(-TAIL_CHARS), stderr: (spawnError ? `${spawnError.message}\n` : "") + err.slice(-TAIL_CHARS)
+        success: !skipped && !timedOut && code === 0,
+        exitCode, timedOut, skipped, truncated, durationMs,
+        stdout: out.slice(-TAIL_CHARS), stderr: (spawnError ? `${spawnError.message}\n` : "") + err.slice(-TAIL_CHARS),
+        ...(structuredFindings !== undefined ? { structuredFindings } : {})
       };
       const icon = result.skipped ? "⊘" : (result.success ? "✔" : "✖");
       const status = result.skipped ? " — skipped" : ((timedOut ? " — TIMEOUT" : "") + (exitCode ? ` — exit ${exitCode}` : ""));

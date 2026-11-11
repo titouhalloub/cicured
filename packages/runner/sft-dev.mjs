@@ -24,9 +24,25 @@ const TASK_TIMEOUT_MS = num(process.env.SFT_TASK_TIMEOUT_MS, 10 * 60 * 1000); //
 const DEADLINE_MS = num(process.env.SFT_DEADLINE_MS, 25 * 60 * 1000);          // whole run (pod budget is 30 min)
 const KILL_GRACE_MS = 5000;
 const TAIL_CHARS = 200000;                                                     // per stream, per task
-const MAX_SEMGREP_FINDINGS = 500;
+const MAX_SEMGREP_FINDINGS = 499;
 
 const warnings = [];
+
+function detectGitSha() {
+  try {
+    const result = spawnSync("git", ["rev-parse", "HEAD"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 3000,
+    });
+    const sha = typeof result.stdout === "string" ? result.stdout.trim() : "";
+    return result.status === 0 && /^[0-9a-f]{40,64}$/i.test(sha) ? sha : null;
+  } catch {
+    return null;
+  }
+}
+
+const GIT_SHA = detectGitSha();
 
 // ── 3. Toolchain detection ─────────────────────────────────────────────
 function readPkg() {
@@ -403,6 +419,7 @@ function writeReport() {
     tool: "sft-dev", version: 2,
     finishedAt: new Date().toISOString(),
     runnerError, warnings,
+    ...(GIT_SHA ? { gitSha: GIT_SHA } : {}),
     summary: {
       total: results.length,
       passed: executed.filter(r => r.success).length,

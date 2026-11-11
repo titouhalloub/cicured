@@ -78,7 +78,7 @@ cd "$WORKSPACE"
 # TODO(M2b): use `git -c http.extraheader="Authorization: Bearer $GIT_TOKEN"`
 # instead of embedding the token in the URL. Acceptable for M2a (1h TTL,
 # single-purpose container); not acceptable once we tee logs to Redis.
-git clone --depth 1 --branch "$GIT_BRANCH" \\
+git clone --depth 1 --branch "$GIT_BRANCH" \
   "https://x-access-token:$GIT_TOKEN@$GIT_REPO_URL" repo
 cd "$REPO_DIR"
 
@@ -128,8 +128,8 @@ if [ -f /opt/sft/build-graph.js ] && [ -d /opt/sft/grammars ]; then
   graph_tmp="$WORKSPACE/.sft-graph.json"
   graph_err="$WORKSPACE/.graph-build.err"
   graph_started_ms="$(epoch_ms)"
-  if SFT_PARSER_GRAMMARS_DIR=/opt/sft/grammars \\
-       timeout 120 node /opt/sft/build-graph.js "$REPO_DIR" >"$graph_tmp" 2>"$graph_err" \\
+  if SFT_PARSER_GRAMMARS_DIR=/opt/sft/grammars \
+       timeout 120 node /opt/sft/build-graph.js "$REPO_DIR" >"$graph_tmp" 2>"$graph_err" \
      && cp "$graph_tmp" /out/sft-graph.json 2>/dev/null; then
     graph_ms=$(( $(epoch_ms) - graph_started_ms ))
     log "phase=graph ok duration_ms=${graph_ms}"

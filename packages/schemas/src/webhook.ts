@@ -35,6 +35,17 @@ export const WebhookDeliveryResultSchema = z.discriminatedUnion("status", [
     status: z.literal("queued"),
     runId: z.string().uuid(),
   }),
+  z.object({
+    status: z.enum([
+      "review-disabled",
+      "no-diff",
+      "no-findings",
+      "review-failed",
+      "review-partial",
+      "review-posted",
+    ]),
+    runId: z.string().uuid().optional(),
+  }),
 ]);
 
 export type WebhookDeliveryResult = z.infer<typeof WebhookDeliveryResultSchema>;

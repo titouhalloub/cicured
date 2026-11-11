@@ -267,6 +267,26 @@ export class WebhooksService {
       this.logger.warn(
         `PR review failed for ${repository.full_name}#${prNumber}: ${failedHunks}/${reviewHunks.length} hunks failed`,
       );
+      // Make the failure visible on the PR itself; a webhook's HTTP 200 alone
+      // is not enough to distinguish this from a clean review.
+      try {
+        await this.github.createPullRequestReview(
+          installation.id,
+          owner,
+          repo,
+          prNumber,
+          commitSha,
+          [
+            "## Cicured AI review",
+            "",
+            `> ⚠️ **Review could not be completed:** all ${reviewHunks.length} diff hunks failed model review. No clean-review conclusion was produced. Please retry after the provider issue is resolved.`,
+          ].join("\\n"),
+          [],
+        );
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "unknown error";
+        this.logger.warn(`could not post PR review failure notice: ${reason}`);
+      }
       return { status: "review-failed", ...(runId !== undefined ? { runId } : {}) };
     }
 

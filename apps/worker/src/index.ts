@@ -69,7 +69,7 @@ async function main(): Promise<void> {
       return githubClient.getFileSnippet(
         repoFullName.slice(0, separator),
         repoFullName.slice(separator + 1),
-        file.replace(/^\\/workspace\\/repo\\//, ""),
+        file.startsWith("/workspace/repo/") ? file.slice("/workspace/repo/".length) : file,
         sha,
         line,
         token,

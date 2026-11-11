@@ -112,6 +112,10 @@ export async function createSandboxContainer(
       // SFT_DEADLINE_MS = budget - installMs - 60s (Spec §2 pre-flight).
       `SFT_DEADLINE_MS=${env.SFT_DEADLINE_BUDGET_MS}`,
       `SFT_TASK_TIMEOUT_MS=${env.SFT_TASK_TIMEOUT_MS}`,
+      // Resilient package downloads without rebuilding the sandbox image.
+      "npm_config_network_concurrency=8",
+      "npm_config_fetch_retries=4",
+      "npm_config_fetch_timeout=180000",
     ],
     Labels: {
       "sft.run-id": runId,

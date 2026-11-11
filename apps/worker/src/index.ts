@@ -42,6 +42,7 @@ async function main(): Promise<void> {
     logger.info("[sft-worker] LLM disabled: ANTHROPIC_API_KEY not set");
   }
   const llmCache = createLlmCache(redis, env.LLM_CACHE_TTL_SECONDS);
+  const githubClient = createGitHubClient(env);
 
   // PUBLISH is an ordinary command, so the BullMQ client can carry the log
   // traffic; only the API needs a dedicated subscriber connection.
@@ -61,7 +62,19 @@ async function main(): Promise<void> {
     attach: ({ containerId, runId, archiver }) =>
       attachAndStream(docker, containerId, runId, logPublisher, logger, archiver),
     mintToken: (installationId) => mintInstallationToken(installationId, env),
-    githubClient: createGitHubClient(env),
+    githubClient,
+    getFindingSnippet: ({ repoFullName, sha, file, line, token }) => {
+      const separator = repoFullName.indexOf("/");
+      if (separator <= 0 || separator === repoFullName.length - 1) return Promise.resolve("");
+      return githubClient.getFileSnippet(
+        repoFullName.slice(0, separator),
+        repoFullName.slice(separator + 1),
+        file.replace(/^\\/workspace\\/repo\\//, ""),
+        sha,
+        line,
+        token,
+      );
+    },
     extractReport: ({ containerId, runId }) =>
       extractAndValidateReport(
         docker,

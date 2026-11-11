@@ -47,7 +47,12 @@ afterAll(() => {
 
 describe("runner Semgrep structured output", () => {
   it("reads the complete JSON output file and surfaces the result cap", async () => {
-    const outcome = await runRunner({}, { PATH: shimDir });
+    const runnerPath = [
+      shimDir,
+      path.dirname(process.execPath),
+      process.env.PATH ?? "",
+    ].filter(Boolean).join(path.delimiter);
+    const outcome = await runRunner({}, { PATH: runnerPath });
 
     expect(outcome.exitCode).toBe(0);
     const task = outcome.report?.tasks.find((entry) => entry.name === "Security") as

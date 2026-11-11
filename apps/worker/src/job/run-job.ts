@@ -335,10 +335,11 @@ export function createRunJob(deps: RunJobDeps): RunJob {
         const drafts = await generateSuggestions(
           findingsWithId,
           async (finding) => {
-            if (!deps.getFindingSnippet || !token || !loaded.run.sha) return "";
+            const sourceSha = outcome.report?.gitSha ?? loaded.run.sha;
+            if (!deps.getFindingSnippet || !token || !sourceSha) return "";
             return deps.getFindingSnippet({
               repoFullName: loaded.project.repoFullName,
-              sha: loaded.run.sha,
+              sha: sourceSha,
               file: finding.file,
               line: finding.line,
               token,

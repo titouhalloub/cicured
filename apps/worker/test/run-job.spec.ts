@@ -636,10 +636,13 @@ describe("run-job code graph plumbing (Phase 3c-2)", () => {
   it("prefers the runner's scanned SHA when the run row has no SHA", async () => {
     const deps = await prepareAI("valid");
     const scannedSha = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
-    deps.loadRunWithProject = vi.fn(async () => ({
-      run: { ...makeRun(), sha: null },
-      project: makeProject(),
-    }));
+    deps.repository.loadRunWithProject = vi.fn(async () => {
+      const loaded = makeRun();
+      return {
+        ...loaded,
+        run: { ...loaded.run, sha: null },
+      };
+    });
     deps.extractReport = vi.fn(async () => ({
       ...failingReport(),
       gitSha: scannedSha,

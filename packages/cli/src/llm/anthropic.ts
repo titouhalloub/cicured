@@ -1,12 +1,7 @@
-import type { LlmProviderId } from "@sft/schemas";
-import { z } from "zod";
+import type { LlmProviderId, ModelPricing } from "@sft/schemas";
 import type { LlmProvider, LlmRequest, LlmResponse, ProviderConfig } from "./types";
-import { type SuggestInput, validateFilesTouched } from "./prompt";
-import { lookupPricing, computeCostUsd } from "./pricing";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL = "claude-sonnet-4-5";
-
 interface AnthropicTextBlock {
   type: string;
   text?: string;
@@ -54,7 +49,7 @@ const LlmSuggestionSchema = z.object({
 export class AnthropicProvider implements LlmProvider {
   readonly providerId: LlmProviderId = "anthropic";
   readonly model: string;
-  readonly pricing: import("@sft/schemas").ModelPricing;
+  readonly pricing: ModelPricing;
 
   constructor(private cfg: ProviderConfig) {
     this.model = cfg.model;

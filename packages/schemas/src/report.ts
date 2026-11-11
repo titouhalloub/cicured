@@ -56,7 +56,7 @@ export const SftTaskV2 = z.object({
   /** Free-form parser config, validated by the parser itself at parse time. */
   parserConfig: z.unknown().optional(),
   /** Normalized structured findings captured separately from bounded stdout. */
-  structuredFindings: z.array(SftTaskFinding).max(501).optional(),
+  structuredFindings: z.array(SftTaskFinding).max(500).optional(),
 });
 
 export const SftSummaryV2 = z.object({

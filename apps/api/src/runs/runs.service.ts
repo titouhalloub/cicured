@@ -17,7 +17,7 @@ import {
   type SftTaskV2,
 } from "@sft/schemas";
 import { parseSftReport } from "@sft/schemas";
-import { and, asc, count, desc, eq, gte, inArray, sql, sum } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, sum } from "drizzle-orm";
 import {
   DRIZZLE,
   findings,

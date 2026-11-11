@@ -69,7 +69,7 @@ function detectTasks() {
 // shell: true lets Windows resolve .cmd shims via %COMSPEC% (cmd.exe),
 // and POSIX resolve shell-script shims via /bin/sh -c.
 function hasPython3() {
-  try { const r = spawnSync("python3", ["--version"], { stdio: "ignore", shell: true }); return r.status === 0; } catch { return false; }
+  try { const r = spawnSync("python3", ["--version"], { stdio: "ignore", shell: process.platform === "win32" }); return r.status === 0; } catch { return false; }
 }
 
 function detectPythonTasks() {
@@ -104,7 +104,7 @@ function detectPythonTasks() {
 // runnable `go` skips gracefully with a warning instead of failing every Go
 // task at spawn time.
 function hasGo() {
-  try { const r = spawnSync("go", ["version"], { stdio: "ignore", shell: true }); return r.status === 0; } catch { return false; }
+  try { const r = spawnSync("go", ["version"], { stdio: "ignore", shell: process.platform === "win32" }); return r.status === 0; } catch { return false; }
 }
 
 /** Shallow walk (max depth 3) for a *_test.go file, skipping vendor/ and .git/. */
@@ -135,7 +135,7 @@ function detectGoTasks() {
 // present — so a missing binary is silent (no warning). --metrics=off keeps the
 // tool local-first; --quiet keeps stdout to JSON only.
 function hasSemgrep() {
-  try { const r = spawnSync("semgrep", ["--version"], { stdio: "ignore", shell: true }); return r.status === 0; } catch { return false; }
+  try { const r = spawnSync("semgrep", ["--version"], { stdio: "ignore", shell: process.platform === "win32" }); return r.status === 0; } catch { return false; }
 }
 
 function detectSemgrepTasks() {
@@ -154,7 +154,7 @@ function detectSemgrepTasks() {
 // `cargo` skips gracefully with a warning instead of failing every Rust task
 // at spawn time.
 function hasCargo() {
-  try { const r = spawnSync("cargo", ["--version"], { stdio: "ignore", shell: true }); return r.status === 0; } catch { return false; }
+  try { const r = spawnSync("cargo", ["--version"], { stdio: "ignore", shell: process.platform === "win32" }); return r.status === 0; } catch { return false; }
 }
 
 function detectRustTasks() {

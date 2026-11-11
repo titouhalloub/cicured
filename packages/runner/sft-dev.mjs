@@ -26,6 +26,7 @@ const KILL_GRACE_MS = 5000;
 const TAIL_CHARS = 200000;                                                     // per stream, per task
 // Reserve one slot under the 500-finding run cap for a visible truncation diagnostic.
 const MAX_SEMGREP_FINDINGS = 499;
+const SEMGREP_OUTPUT_PATH = path.join(os.tmpdir(), `sft-semgrep-${process.pid}.json`);
 
 const warnings = [];
 
@@ -168,7 +169,7 @@ function detectSemgrepTasks() {
   return [{
     name: "Security",
     parser: "semgrep",
-    command: `semgrep --config=${config} --json --no-git-ignore --quiet --metrics=off --output=.sft-semgrep-output.json`,
+    command: `semgrep --config=${config} --json --no-git-ignore --quiet --metrics=off --output="${SEMGREP_OUTPUT_PATH}"`,
     timeout: 300000
   }];
 }
@@ -320,7 +321,7 @@ function normalizeSemgrepOutput(raw) {
 }
 
 function collectSemgrepFindings(stdout, timedOut, spawnError) {
-  const outputPath = path.join(process.cwd(), ".sft-semgrep-output.json");
+  const outputPath = SEMGREP_OUTPUT_PATH;
   try {
     if (timedOut) {
       return [semgrepDiagnostic(

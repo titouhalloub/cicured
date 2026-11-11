@@ -31,7 +31,7 @@ const SftTaskFinding = z.object({
   file: z.string().min(1).max(1024),
   line: z.number().int().nonnegative(),
   col: z.number().int().nonnegative(),
-  message: z.string().min(1).max(1000),
+  message: z.string().min(1).max(512),
 });
 
 /** One task entry of `sft-report.json` schema v2 (pinned runner, Spec §2). */

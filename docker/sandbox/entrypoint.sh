@@ -22,10 +22,10 @@ DEADLINE_RESERVE_MS=60000
 # own 12 min default), so never hand it a non-positive deadline.
 MIN_DEADLINE_MS=1000
 
-log() { printf '[sandbox] %s\\n' "$*"; }
+log() { printf '[sandbox] %s\n' "$*"; }
 # Exit 2 == "runner crash" for the worker: a bootstrap failure is operational,
 # never a task failure, so the report must not be parsed (Spec §2).
-die() { printf '[sandbox] fatal: %s\\n' "$*" >&2; exit 2; }
+die() { printf '[sandbox] fatal: %s\n' "$*" >&2; exit 2; }
 require_env() { [ -n "${!1:-}" ] || die "$1 is required"; }
 
 # ── 1. Writable paths ──────────────────────────────────────────────────────
@@ -148,7 +148,7 @@ else
   log "phase=graph skipped: bundle or grammars missing"
 fi
 
-# ── 6. Run the pinned runner ───────────────────────────────────────────────
+# ── 6. Run the pinned runner ────────────────────────────────────────────────
 # `exec` replaces this shell, so the runner's exit code becomes the container's.
 cd "$REPO_DIR"
 

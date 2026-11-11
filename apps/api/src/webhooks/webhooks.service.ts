@@ -280,7 +280,7 @@ export class WebhooksService {
             "## Cicured AI review",
             "",
             `> ⚠️ **Review could not be completed:** all ${reviewHunks.length} diff hunks failed model review. No clean-review conclusion was produced. Please retry after the provider issue is resolved.`,
-          ].join("\\n"),
+          ].join("\n"),
           [],
         );
       } catch (error) {

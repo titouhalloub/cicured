@@ -22,10 +22,10 @@ DEADLINE_RESERVE_MS=60000
 # own 12 min default), so never hand it a non-positive deadline.
 MIN_DEADLINE_MS=1000
 
-log() { printf '[sandbox] %s\n' "$*"; }
+log() { printf '[sandbox] %s\\n' "$*"; }
 # Exit 2 == "runner crash" for the worker: a bootstrap failure is operational,
 # never a task failure, so the report must not be parsed (Spec §2).
-die() { printf '[sandbox] fatal: %s\n' "$*" >&2; exit 2; }
+die() { printf '[sandbox] fatal: %s\\n' "$*" >&2; exit 2; }
 require_env() { [ -n "${!1:-}" ] || die "$1 is required"; }
 
 # ── 1. Writable paths ──────────────────────────────────────────────────────
@@ -45,6 +45,12 @@ export npm_config_cache="$WORKSPACE/.npm"
 # Sandbox installs must not depend on the user's repo .npmrc: force the public
 # registry so every cloned repo resolves tarballs from the same fast host.
 export npm_config_registry=https://registry.npmjs.org/
+# Registry requests can be slow or intermittently time out on shared runners.
+# Keep concurrency bounded and retry transient failures before aborting install.
+# These npm_config_* variables are also read by pnpm as configuration settings.
+export npm_config_network_concurrency=8
+export npm_config_fetch_retries=4
+export npm_config_fetch_timeout=180000
 export PNPM_HOME="$WORKSPACE/.pnpm"
 export YARN_CACHE_FOLDER="$WORKSPACE/.yarn"
 # Never block waiting for git credentials - the token is in the URL below.
@@ -72,7 +78,7 @@ cd "$WORKSPACE"
 # TODO(M2b): use `git -c http.extraheader="Authorization: Bearer $GIT_TOKEN"`
 # instead of embedding the token in the URL. Acceptable for M2a (1h TTL,
 # single-purpose container); not acceptable once we tee logs to Redis.
-git clone --depth 1 --branch "$GIT_BRANCH" \
+git clone --depth 1 --branch "$GIT_BRANCH" \\
   "https://x-access-token:$GIT_TOKEN@$GIT_REPO_URL" repo
 cd "$REPO_DIR"
 
@@ -122,8 +128,8 @@ if [ -f /opt/sft/build-graph.js ] && [ -d /opt/sft/grammars ]; then
   graph_tmp="$WORKSPACE/.sft-graph.json"
   graph_err="$WORKSPACE/.graph-build.err"
   graph_started_ms="$(epoch_ms)"
-  if SFT_PARSER_GRAMMARS_DIR=/opt/sft/grammars \
-       timeout 120 node /opt/sft/build-graph.js "$REPO_DIR" >"$graph_tmp" 2>"$graph_err" \
+  if SFT_PARSER_GRAMMARS_DIR=/opt/sft/grammars \\
+       timeout 120 node /opt/sft/build-graph.js "$REPO_DIR" >"$graph_tmp" 2>"$graph_err" \\
      && cp "$graph_tmp" /out/sft-graph.json 2>/dev/null; then
     graph_ms=$(( $(epoch_ms) - graph_started_ms ))
     log "phase=graph ok duration_ms=${graph_ms}"
@@ -142,7 +148,7 @@ else
   log "phase=graph skipped: bundle or grammars missing"
 fi
 
-# ── 6. Run the pinned runner ────────────────────────────────────────────────
+# ── 6. Run the pinned runner ───────────────────────────────────────────────
 # `exec` replaces this shell, so the runner's exit code becomes the container's.
 cd "$REPO_DIR"
 

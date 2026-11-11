@@ -203,13 +203,22 @@ describe("UsageService.getSummary", () => {
 
   /** Query-chain stub covering the totals, grouped category, model and rule queries. */
   function makeSummaryDb(rows: SummaryDbRows): Database {
+    type GroupedQueryChain = {
+      groupBy: () => GroupedQueryChain;
+      orderBy: () => GroupedQueryChain;
+      limit: (n: number) => Promise<unknown[]>;
+      then: (
+        resolve: (value: unknown[]) => unknown,
+        reject?: (reason: unknown) => unknown,
+      ) => Promise<unknown>;
+    };
     const grouped = (result: unknown[]) => {
-      const chain: any = {};
-      chain.groupBy = () => chain;
-      chain.orderBy = () => chain;
-      chain.limit = async (n: number) => result.slice(0, n);
-      chain.then = (resolve: (value: unknown[]) => unknown, reject?: (reason: unknown) => unknown) =>
-        Promise.resolve(result).then(resolve, reject);
+      const chain: GroupedQueryChain = {
+        groupBy: () => chain,
+        orderBy: () => chain,
+        limit: async (n: number) => result.slice(0, n),
+        then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
+      };
       return chain;
     };
 

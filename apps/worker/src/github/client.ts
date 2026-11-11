@@ -2,6 +2,8 @@ import { registerSecret, unregisterSecret } from "../common/secrets";
 import { mintInstallationToken, type GitHubAppCredentials } from "./token";
 
 const REQUEST_TIMEOUT_MS = 15_000;
+const MAX_SOURCE_FILE_BYTES = 1_000_000;
+const MAX_SOURCE_LINE_CHARS = 600;
 
 /**
  * Minimal GitHub REST client for the worker (v2 combined pipeline): reads
@@ -39,10 +41,15 @@ export interface WorkerGitHubClient {
 
 export function createGitHubClient(env: GitHubAppCredentials): WorkerGitHubClient {
   return {
-    async getFileSnippet(owner, repo, filePath, ref, line, token) {
+    async getFileSnippet(owner, repo, filePath, ref, line, token): Promise<string> {
       const normalized = filePath.replace(/\\/g, "/");
       const segments = normalized.split("/");
       if (
+        !owner ||
+        !repo ||
+        repo.includes("/") ||
+        !ref ||
+        !token ||
         !normalized ||
         normalized.startsWith("/") ||
         segments.some((segment) => !segment || segment === "." || segment === "..") ||
@@ -67,8 +74,9 @@ export function createGitHubClient(env: GitHubAppCredentials): WorkerGitHubClien
       );
       if (response.status === 404) return "";
       if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(`GitHub source read responded ${response.status}: ${text.slice(0, 200)}`);
+        // Do not copy remote error bodies into logs; they may contain sensitive
+        // repository data and are not needed to diagnose the HTTP status.
+        throw new Error(`GitHub source read responded ${response.status}`);
       }
 
       const body = (await response.json()) as {
@@ -83,18 +91,25 @@ export function createGitHubClient(env: GitHubAppCredentials): WorkerGitHubClien
         body.type !== "file" ||
         body.encoding !== "base64" ||
         typeof body.content !== "string" ||
-        (typeof body.size === "number" && body.size > 1_000_000)
+        body.content.length > 1_400_000 ||
+        (typeof body.size === "number" && body.size > MAX_SOURCE_FILE_BYTES)
       ) {
         return "";
       }
 
-      const source = Buffer.from(body.content.replace(/\s/g, ""), "base64").toString("utf8");
+      const source = Buffer.from(body.content.replace(/[\r\n]/g, ""), "base64").toString("utf8");
+      if (source.includes("\u0000")) return "";
       const lines = source.split(/\r?\n/);
       const firstLine = Math.max(1, line - 20);
       const lastLine = Math.min(lines.length, line + 20);
       return lines
         .slice(firstLine - 1, lastLine)
-        .map((text, index) => `${firstLine + index}: ${text}`)
+        .map((text, index) => {
+          const clipped = text.length > MAX_SOURCE_LINE_CHARS
+            ? `${text.slice(0, MAX_SOURCE_LINE_CHARS)} …[line truncated]`
+            : text;
+          return `${firstLine + index}: ${clipped}`;
+        })
         .join("\n");
     },
     async postPullRequestComment(owner, repo, prNumber, installationId, body) {

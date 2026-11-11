@@ -326,7 +326,16 @@ describe("WebhooksService", () => {
 
       expect(result).toEqual({ status: "review-failed", runId: RUN_ID });
       expect(llm.reviewHunk).toHaveBeenCalledTimes(1);
-      expect(github.createPullRequestReview).not.toHaveBeenCalled();
+      expect(github.createPullRequestReview).toHaveBeenCalledTimes(1);
+      expect(github.createPullRequestReview).toHaveBeenCalledWith(
+        12345,
+        "acme",
+        "web",
+        17,
+        "0123456789abcdef0123456789abcdef01234567",
+        expect.stringContaining("Review could not be completed"),
+        [],
+      );
       expect(db.insertedTables).not.toContain(llmCalls);
       expect(queue.enqueueRun).toHaveBeenCalledWith({
         runId: RUN_ID,

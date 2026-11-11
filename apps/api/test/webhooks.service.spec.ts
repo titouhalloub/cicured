@@ -50,6 +50,20 @@ const PR_DIFF = [
   "",
 ].join("\n");
 
+const PR_DIFF_TWO_HUNKS = [
+  "diff --git a/src/users.ts b/src/users.ts",
+  "index 1111111..2222222 100644",
+  "--- a/src/users.ts",
+  "+++ b/src/users.ts",
+  "@@ -1,1 +1,1 @@",
+  "-const query = safe(id);",
+  "+const query = unsafe(id);",
+  "@@ -10,1 +10,1 @@",
+  "-const other = safe(value);",
+  "+const other = unsafe(value);",
+  "",
+].join("\n");
+
 interface DbOptions {
   /** Rows returned by the projects lookup. */
   projectRows?: unknown[];
@@ -319,6 +333,40 @@ describe("WebhooksService", () => {
         projectId: PROJECT.id,
         prNumber: 17,
       });
+    });
+  });
+
+    it("posts an explicit partial-review warning when only some hunks fail", async () => {
+      const db = dbDouble({
+        projectRows: [{ ...PROJECT, userId: "33333333-3333-4333-8333-333333333333" }],
+        dedupRows: [],
+        insertedRows: [{ id: RUN_ID }],
+      });
+      const github = githubDouble();
+      github.getPullRequestDiff.mockResolvedValue(PR_DIFF_TWO_HUNKS);
+      const llm = llmDouble();
+      llm.reviewHunk
+        .mockResolvedValueOnce({
+          result: { summary: "First hunk reviewed", comments: [] },
+          usage: { inputTokens: 10, outputTokens: 5 },
+        })
+        .mockRejectedValueOnce(new Error("OpenRouter responded 429"));
+
+      const { service } = makeService(db, { github, llm });
+      const result = await service.handleGithubPullRequest(PR_BODY);
+
+      expect(result).toEqual({ status: "review-partial", runId: RUN_ID });
+      expect(github.createPullRequestReview).toHaveBeenCalledTimes(1);
+      expect(github.createPullRequestReview).toHaveBeenCalledWith(
+        12345,
+        "acme",
+        "web",
+        17,
+        "0123456789abcdef0123456789abcdef01234567",
+        expect.stringContaining("Partial review"),
+        [],
+      );
+      expect(db.insertedTables).toContain(llmCalls);
     });
   });
 

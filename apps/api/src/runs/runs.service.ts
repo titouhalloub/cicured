@@ -207,6 +207,11 @@ export class RunsService {
   }
 
   private async assertWithinQuota(userId: string, plan: string): Promise<void> {
+    // Plan-based build-minute limits are a production billing control. Local
+    // development and tests must be able to exercise runs without consuming a
+    // production plan allowance; the concurrency guard still applies.
+    if (!this.config.isProduction) return;
+
     const quota = PLAN_BUILD_MINUTES_PER_MONTH[plan] ?? PLAN_BUILD_MINUTES_PER_MONTH.free!;
     const used = await this.monthBuildMinutes(userId);
     if (used >= quota) {

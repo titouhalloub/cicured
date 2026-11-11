@@ -12,7 +12,7 @@ describe("WorkerGitHubClient.getFileSnippet", () => {
   });
 
   it("decodes the file at the requested commit and returns bounded numbered context", async () => {
-    const source = ["one", "two", "three", "four", "five"].join("\n");
+    const source = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n");
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       type: "file",
       encoding: "base64",
@@ -27,11 +27,13 @@ describe("WorkerGitHubClient.getFileSnippet", () => {
       "web",
       "src/users.ts",
       "0123456789abcdef",
-      3,
+      50,
       "ghs_test_token",
     );
 
-    expect(snippet).toBe("1: one\n2: two\n3: three\n4: four\n5: five");
+    expect(snippet.split("\n")).toHaveLength(41);
+    expect(snippet.split("\n")[0]).toBe("30: line 30");
+    expect(snippet.split("\n").at(-1)).toBe("70: line 70");
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.github.com/repos/acme/web/contents/src/users.ts?ref=0123456789abcdef",
       expect.objectContaining({

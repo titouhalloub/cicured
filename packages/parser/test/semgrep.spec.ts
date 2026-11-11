@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSemgrep } from "../src/index";
+import { parseSemgrep, parseTask } from "../src/index";
 
 function finding(
   check_id: string,
@@ -112,5 +112,47 @@ describe("parseSemgrep", () => {
       parseSemgrep(JSON.stringify({ results: "not-an-array" })),
     ).not.toThrow();
     expect(parseSemgrep(JSON.stringify({ results: "not-an-array" }))).toEqual([]);
+  });
+});
+
+
+describe("parseTask structured Semgrep findings", () => {
+  const baseTask = {
+    name: "Security",
+    command: "semgrep --json",
+    success: true,
+    exitCode: 0,
+    timedOut: false,
+    skipped: false,
+    truncated: false,
+    durationMs: 1,
+    stdout: "",
+    stderr: "",
+    parser: "semgrep",
+  };
+
+  it("uses normalized findings captured from the complete Semgrep output file", () => {
+    const structuredFindings = [{
+      severity: "error" as const,
+      category: "lint" as const,
+      ruleId: "javascript.lang.security.sql-injection",
+      file: "src/users.ts",
+      line: 12,
+      col: 4,
+      message: "Untrusted input reaches a SQL query.",
+    }];
+
+    expect(parseTask({ ...baseTask, structuredFindings })).toEqual(structuredFindings);
+  });
+
+  it("surfaces a diagnostic when Semgrep stdout was truncated and no structured output exists", () => {
+    const findings = parseTask({ ...baseTask, truncated: true });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatchObject({
+      severity: "warning",
+      category: "lint",
+      ruleId: "sft-semgrep-output-truncated",
+    });
   });
 });

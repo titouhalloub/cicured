@@ -4,7 +4,6 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { assertRunnerArtifact, EnvSchema, loadEnv } from "../src/env";
 
-/** Minimal valid worker environment; every field the worker actually reads. */
 const VALID = {
   DATABASE_URL: "postgres://sft:sft@localhost:5432/sft_dev",
   SFT_ENCRYPTION_KEY:
@@ -15,7 +14,7 @@ const VALID = {
   S3_SECRET_ACCESS_KEY: "test-secret-key",
 };
 
-describe("worker env (mirrors apps/api/src/config/env.ts)", () => {
+describe("worker env", () => {
   it("applies the locked M2a defaults", () => {
     const env = EnvSchema.parse(VALID);
     expect(env.REDIS_URL).toBe("redis://localhost:6379");
@@ -25,6 +24,22 @@ describe("worker env (mirrors apps/api/src/config/env.ts)", () => {
     expect(env.REPORTS_DIR).toBe("./tmp/reports");
     expect(env.SFT_TASK_TIMEOUT_MS).toBe(600_000);
     expect(env.SFT_DEADLINE_BUDGET_MS).toBe(1_800_000);
+    expect(env.LLM_PROVIDER).toBe("anthropic");
+  });
+
+  it("accepts OpenRouter and its model selection", () => {
+    const env = EnvSchema.parse({
+      ...VALID,
+      LLM_PROVIDER: "openrouter",
+      OPENROUTER_API_KEY: "test-openrouter-key",
+      LLM_MODEL: "anthropic/claude-sonnet-4.5",
+    });
+    expect(env.LLM_PROVIDER).toBe("openrouter");
+    expect(env.LLM_MODEL).toBe("anthropic/claude-sonnet-4.5");
+  });
+
+  it("rejects unknown providers", () => {
+    expect(() => EnvSchema.parse({ ...VALID, LLM_PROVIDER: "ollama" })).toThrow();
   });
 
   it("defaults the runner mount to the pinned artifact", () => {
@@ -35,24 +50,19 @@ describe("worker env (mirrors apps/api/src/config/env.ts)", () => {
   it("reports every missing required variable at once", () => {
     const source = { ...process.env };
     for (const key of Object.keys(VALID)) delete source[key];
-
     let message = "";
     try {
       loadEnv(source);
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
-
     expect(message).toContain("invalid environment configuration");
-    for (const key of Object.keys(VALID)) {
-      expect(message).toContain(key);
-    }
+    for (const key of Object.keys(VALID)) expect(message).toContain(key);
   });
 
   it("fails fast when the pinned runner is missing on the host", async () => {
     const env = EnvSchema.parse({ ...VALID, SFT_RUNNER_HOST_PATH: "/nope/sft-dev.mjs" });
     expect(() => assertRunnerArtifact(env)).toThrow(/pinned runner not found/);
-
     const dir = await mkdtemp(path.join(tmpdir(), "sft-runner-"));
     const file = path.join(dir, "sft-dev.mjs");
     await writeFile(file, "// pinned\n");

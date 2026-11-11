@@ -13,6 +13,8 @@ import { PARSERS, TASK_NAME_TO_PARSER } from "./registry";
  */
 export function parseTask(task: SftTaskV2): ParsedFinding[] {
   try {
+    if (task.skipped) return [];
+
     // Structured findings are produced by the runner for machine-readable
     // outputs (notably Semgrep) so large JSON documents never need to fit in
     // the bounded stdout field.

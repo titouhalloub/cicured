@@ -18,9 +18,19 @@ export interface RunnerTaskResult {
   durationMs: number;
   stdout: string;
   stderr: string;
+  structuredFindings?: Array<{
+    severity: "error" | "warning" | "info";
+    category: "build" | "typecheck" | "lint" | "test";
+    ruleId: string;
+    file: string;
+    line: number;
+    col: number;
+    message: string;
+  }>;
 }
 
 export interface RunnerReport {
+  gitSha?: string;
   tool: string;
   version: number;
   finishedAt: string;

@@ -69,7 +69,7 @@ describe("runner Semgrep structured output", () => {
         })
       | undefined;
     expect(task).toBeDefined();
-    expect(task?.structuredFindings).toHaveLength(501);
+    expect(task?.structuredFindings).toHaveLength(500);
     expect(task?.structuredFindings?.[0]).toMatchObject({
       severity: "error",
       category: "lint",
@@ -78,7 +78,7 @@ describe("runner Semgrep structured output", () => {
       line: 1,
       col: 2,
     });
-    expect(task?.structuredFindings?.[500]).toMatchObject({
+    expect(task?.structuredFindings?.[499]).toMatchObject({
       severity: "warning",
       ruleId: "sft-semgrep-results-truncated",
     });

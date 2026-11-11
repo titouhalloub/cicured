@@ -32,20 +32,6 @@ function extractText(payload: unknown): string | null {
   return null;
 }
 
-/** Models occasionally wrap JSON in a ```json fence despite the prompt. */
-function stripFences(text: string): string {
-  const trimmed = text.trim();
-  const match = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/.exec(trimmed);
-  return match?.[1]?.trim() ?? trimmed;
-}
-
-const LlmSuggestionSchema = z.object({
-  patchDiff: z.string().min(1),
-  explanation: z.string().min(1),
-  confidence: z.number().min(0).max(1),
-  filesTouched: z.array(z.string().min(1)).min(1),
-});
-
 export class AnthropicProvider implements LlmProvider {
   readonly providerId: LlmProviderId = "anthropic";
   readonly model: string;

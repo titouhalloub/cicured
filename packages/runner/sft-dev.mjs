@@ -24,6 +24,7 @@ const TASK_TIMEOUT_MS = num(process.env.SFT_TASK_TIMEOUT_MS, 10 * 60 * 1000); //
 const DEADLINE_MS = num(process.env.SFT_DEADLINE_MS, 25 * 60 * 1000);          // whole run (pod budget is 30 min)
 const KILL_GRACE_MS = 5000;
 const TAIL_CHARS = 200000;                                                     // per stream, per task
+// Reserve one slot under the 500-finding run cap for a visible truncation diagnostic.
 const MAX_SEMGREP_FINDINGS = 499;
 
 const warnings = [];
@@ -291,7 +292,7 @@ function normalizeSemgrepOutput(raw) {
     }
     const rawSeverity = String(result?.extra?.severity || "").toUpperCase();
     const message = typeof result?.extra?.message === "string" && result.extra.message.trim()
-      ? result.extra.message.slice(0, 1000)
+      ? result.extra.message.slice(0, 512)
       : `Semgrep rule ${ruleId} matched.`;
     findings.push({
       severity: rawSeverity === "ERROR" ? "error" : rawSeverity === "INFO" ? "info" : "warning",

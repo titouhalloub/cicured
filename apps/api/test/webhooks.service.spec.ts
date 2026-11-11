@@ -79,30 +79,29 @@ function dbDouble(options: DbOptions = {}) {
     insert: vi.fn((table: unknown) => {
       insertedTables.push(table);
       return {
-      values: vi.fn(() => {
-        if (table === webhookDeliveries) {
-          // Awaiting the values() builder is what executes the insert.
+        values: vi.fn(() => {
+          if (table === webhookDeliveries) {
+            // Awaiting the values() builder is what executes the insert.
+            return {
+              then: (
+                resolve: (value: unknown) => unknown,
+                reject: (reason: unknown) => unknown,
+              ) => {
+                if (options.deliveryError) {
+                  return Promise.reject(options.deliveryError).then(resolve, reject);
+                }
+                return Promise.resolve([]).then(resolve, reject);
+              },
+            };
+          }
           return {
-            then: (
-              resolve: (value: unknown) => unknown,
-              reject: (reason: unknown) => unknown,
-            ) => {
-              if (options.deliveryError) {
-                return Promise.reject(options.deliveryError).then(resolve, reject);
-              }
-              return Promise.resolve([]).then(resolve, reject);
-            },
+            returning: vi.fn(async () => options.insertedRows ?? [{ id: RUN_ID }]),
           };
-        }
-        return {
-          returning: vi.fn(async () => options.insertedRows ?? [{ id: RUN_ID }]),
-        };
-      }),
-    };
+        }),
+      };
     }),
   };
 }
-
 function cryptoDouble(decrypt: () => string): CryptoService {
   return { decrypt: vi.fn(decrypt) } as unknown as CryptoService;
 }

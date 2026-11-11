@@ -46,6 +46,7 @@ describe("worker table parity with apps/api", () => {
       "project_id",
       "s3_log_key",
       "s3_report_key",
+      "sha",
       "started_at",
       "status",
       "trigger",

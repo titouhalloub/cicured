@@ -22,6 +22,20 @@ export class RunsQueue {
     await this.queue.add(RUN_JOB_NAME, data, { jobId: data.runId });
   }
 
+  /**
+   * Remove a queued job after its run row has been atomically marked cancelled.
+   * Active jobs cannot be removed from BullMQ; the worker observes the DB
+   * cancellation state and terminates its sandbox instead.
+   */
+  async removeQueuedRun(runId: string): Promise<void> {
+    const job = await this.queue.getJob(runId);
+    if (!job) return;
+    const state = await job.getState();
+    if (state === "waiting" || state === "delayed" || state === "waiting-children") {
+      await job.remove();
+    }
+  }
+
   /** Used by the M1 acceptance test to prove the job exists. */
   async hasJob(runId: string): Promise<boolean> {
     const job = await this.queue.getJob(runId);

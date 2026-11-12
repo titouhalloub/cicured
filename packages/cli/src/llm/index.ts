@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { LlmProvider, ProviderConfig } from "./types";
 import { AnthropicProvider } from "./anthropic";
 import { OpenAiCompatProvider } from "./openai-compat";

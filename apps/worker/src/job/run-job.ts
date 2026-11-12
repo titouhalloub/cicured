@@ -229,6 +229,22 @@ export function createRunJob(deps: RunJobDeps): RunJob {
     };
 
     try {
+      // Avoid minting a GitHub token or creating a sandbox if cancellation
+      // landed after the worker claimed the queued row.
+      if (await deps.repository.isRunCancelled?.(runId)) {
+        const finishedAt = new Date();
+        await deps.repository.finalizeRun(runId, {
+          status: "cancelled",
+          exitCode: null,
+          failureKind: "cancelled",
+          finishedAt,
+          buildMinutes: buildMinutes(startedAt, finishedAt),
+        });
+        finalized = true;
+        await publishEnd(deps, runId, "cancelled", null);
+        return { runId, status: "cancelled", exitCode: null, failureKind: "cancelled" };
+      }
+
       const installationId = decryptInstallationId(
         deps.env.SFT_ENCRYPTION_KEY,
         loaded.project.installationIdEnc,

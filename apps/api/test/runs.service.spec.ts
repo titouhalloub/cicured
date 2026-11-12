@@ -419,6 +419,47 @@ describe("RunsService.createManualRun guards (M5 §9)", () => {
   });
 });
 
+describe("RunsService.cancelOwnedRun", () => {
+  it("marks an owned queued run cancelled and removes its queued job", async () => {
+    const { db } = makeDbStub({
+      ownedRows: [makeRunRow()],
+      updated: makeRunRow({ status: "cancelled", failureKind: "cancelled", finishedAt: new Date() }),
+    });
+    const removeQueuedRun = vi.fn().mockResolvedValue(undefined);
+    const service = new RunsService(
+      db,
+      {} as unknown as S3Client,
+      {} as unknown as AppConfig,
+      { removeQueuedRun } as unknown as RunsQueue,
+      makeProjectsStub(makeProjectRow()),
+    );
+
+    const result = await service.cancelOwnedRun({ id: USER_ID } as never, RUN_ID);
+
+    expect(result.cancelled).toBe(true);
+    expect(result.run.status).toBe("cancelled");
+    expect(removeQueuedRun).toHaveBeenCalledWith(RUN_ID);
+  });
+
+  it("does not overwrite a terminal run", async () => {
+    const terminalRun = makeRunRow({ status: "success" });
+    const { db, calls } = makeDbStub({ ownedRows: [terminalRun] });
+    const service = new RunsService(
+      db,
+      {} as unknown as S3Client,
+      {} as unknown as AppConfig,
+      {} as unknown as RunsQueue,
+      makeProjectsStub(makeProjectRow()),
+    );
+
+    const result = await service.cancelOwnedRun({ id: USER_ID } as never, RUN_ID);
+
+    expect(result.cancelled).toBe(false);
+    expect(result.run.status).toBe("success");
+    expect(calls.updates).toHaveLength(0);
+  });
+});
+
 describe("RunsService.transition (Spec §5 state machine)", () => {
   it("applies a legal transition", async () => {
     const { db, calls } = makeDbStub({

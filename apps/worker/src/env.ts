@@ -74,9 +74,10 @@ export const EnvSchema = z.object({
   S3_BUCKET: z.string().min(1).default("cicured-logs"),
 
    // ─── LLM suggestion engine (M4a) ──────────────────────────────────────────
-   // Leave ANTHROPIC_API_KEY unset to disable the suggestion stage entirely.
-   LLM_PROVIDER: z.enum(["anthropic"]).default("anthropic"),
-   ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  // Leave the selected provider key unset to disable the suggestion stage entirely.
+  LLM_PROVIDER: z.enum(["anthropic", "openrouter"]).default("anthropic"),
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  OPENROUTER_API_KEY: z.string().min(1).optional(),
    LLM_MODEL: z.string().min(1).default("claude-sonnet-4-5"),
    LLM_TEMPERATURE: z.coerce.number().min(0).max(1).default(0.2),
    LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(2000),

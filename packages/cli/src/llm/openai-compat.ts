@@ -1,7 +1,6 @@
 import type { LlmProviderId } from "@sft/schemas";
 import type { LlmProvider, LlmRequest, LlmResponse, ProviderConfig } from "./types";
-import { buildMessages } from "./prompt";
-import { lookupPricing, computeCostUsd } from "./pricing";
+import type { ModelPricing } from "@sft/schemas";
 
 function normalizeBaseUrl(baseUrl?: string): string {
   if (!baseUrl) return "https://api.openai.com/v1";
@@ -33,7 +32,7 @@ interface OpenAiResponse {
 export class OpenAiCompatProvider implements LlmProvider {
   readonly providerId: LlmProviderId;
   readonly model: string;
-  readonly pricing: import("@sft/schemas").ModelPricing;
+  readonly pricing: ModelPricing;
   readonly baseUrl: string;
   readonly apiKey: string;
 

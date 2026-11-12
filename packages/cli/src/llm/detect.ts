@@ -1,8 +1,38 @@
-import os from "node:os";
 import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
+import type { LlmProviderId, ModelPricing } from "@sft/schemas";
 import type { ProviderConfig } from "./types";
 import { lookupPricing } from "./pricing";
+
+interface LlmConfig {
+  provider?: unknown;
+  model?: unknown;
+  apiKey?: unknown;
+  apiKeyEnv?: unknown;
+  baseUrl?: unknown;
+  pricing?: unknown;
+}
+
+interface SftConfig {
+  llm?: LlmConfig;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isModelPricing(value: unknown): value is ModelPricing {
+  if (!isRecord(value)) return false;
+  return typeof value.inputPerM === "number" && typeof value.outputPerM === "number";
+}
+
+const PROVIDERS: readonly LlmProviderId[] = [
+  "anthropic",
+  "openai",
+  "openai-compatible",
+  "gemini",
+  "ollama",
+];
 
 export function detectProvider(): ProviderConfig {
   // 1. Explicit override
@@ -64,33 +94,43 @@ export function detectProvider(): ProviderConfig {
   );
 }
 
-function tryReadConfig(): any {
-  const p = path.join(process.cwd(), "sft-dev.config.json");
-  if (!existsSync(p)) return null;
+function tryReadConfig(): SftConfig | null {
+  const configPath = path.join(process.cwd(), "sft-dev.config.json");
+  if (!existsSync(configPath)) return null;
   try {
-    return JSON.parse(readFileSync(p, "utf8"));
+    const parsed: unknown = JSON.parse(readFileSync(configPath, "utf8"));
+    if (!isRecord(parsed) || !isRecord(parsed.llm)) return null;
+    return { llm: parsed.llm as LlmConfig };
   } catch {
     return null;
   }
 }
 
-function resolveConfig(llm: any): ProviderConfig {
-  const provider = llm.provider as string;
-  if (!provider) throw new Error("llm.provider is required when llm is set in config");
-  const model = llm.model as string;
-  if (!model) throw new Error("llm.model is required");
-  const apiKey =
-    (llm.apiKeyEnv && process.env[llm.apiKeyEnv as string]) ||
-    (llm.apiKey as string) ||
-    "";
-  if (!apiKey && provider !== "ollama") {
-    throw new Error(`No API key found for provider "${provider}". Set ${llm.apiKeyEnv ?? "llm.apiKey"}.`);
+function resolveConfig(llm: LlmConfig): ProviderConfig {
+  if (typeof llm.provider !== "string" || !PROVIDERS.includes(llm.provider as LlmProviderId)) {
+    throw new Error("llm.provider must be a supported provider");
   }
+  if (typeof llm.model !== "string" || llm.model.length === 0) {
+    throw new Error("llm.model is required");
+  }
+
+  const provider = llm.provider as LlmProviderId;
+  const model = llm.model;
+  const apiKeyEnv = typeof llm.apiKeyEnv === "string" ? llm.apiKeyEnv : undefined;
+  const configuredApiKey = typeof llm.apiKey === "string" ? llm.apiKey : "";
+  const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) || configuredApiKey;
+  const baseUrl = typeof llm.baseUrl === "string" ? llm.baseUrl : undefined;
+  const pricingOverride = isModelPricing(llm.pricing) ? llm.pricing : undefined;
+
+  if (!apiKey && provider !== "ollama") {
+    throw new Error(`No API key found for provider "${provider}". Set ${apiKeyEnv ?? "llm.apiKey"}.`);
+  }
+
   return {
-    provider: provider as any,
+    provider,
     model,
-    baseUrl: llm.baseUrl,
+    ...(baseUrl ? { baseUrl } : {}),
     apiKey,
-    pricing: lookupPricing(model, llm.pricing),
+    pricing: lookupPricing(model, pricingOverride),
   };
 }

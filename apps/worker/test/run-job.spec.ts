@@ -643,10 +643,13 @@ describe("run-job code graph plumbing (Phase 3c-2)", () => {
         run: { ...loaded.run, sha: null },
       };
     });
-    deps.extractReport = vi.fn(async () => ({
-      ...failingReport(),
-      gitSha: scannedSha,
-    }));
+    deps.extractReport = vi.fn(async () => {
+      const extracted = failingReport();
+      return {
+        ...extracted,
+        report: { ...extracted.report, gitSha: scannedSha },
+      };
+    });
 
     await createRunJob(deps)(RUN_ID);
 

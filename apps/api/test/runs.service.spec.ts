@@ -499,8 +499,12 @@ describe("RunsService.findingsForRun (M4b-2a: GET /runs/:id/findings)", () => {
 
     const rows = await makeService(db).findingsForRun({ id: USER_ID } as never, RUN_ID);
 
-    // Rows pass through untouched; Postgres applies the ORDER BY.
-    expect(rows).toEqual([errorInB, warningInA]);
+    // The API decorates each finding with its itemized AI cost (zero when
+    // no matching ledger entries exist); Postgres applies the ORDER BY.
+    expect(rows).toEqual([
+      { ...errorInB, costUsd: 0 },
+      { ...warningInA, costUsd: 0 },
+    ]);
     expect(calls.orderBy).toHaveLength(1);
     expect(calls.orderBy[0]!.map(orderArgInfo)).toEqual([
       { column: "severity", direction: "desc" },

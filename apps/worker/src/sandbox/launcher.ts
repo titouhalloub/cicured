@@ -42,11 +42,12 @@ export interface SandboxLaunchInput {
 export interface SandboxWaitResult {
   exitCode: number | null;
   timedOut: boolean;
+  cancelled?: boolean;
 }
 
 export interface SandboxHandle {
   readonly containerId: string;
-  waitFor(timeoutMs: number): Promise<SandboxWaitResult>;
+  waitFor(timeoutMs: number, shouldCancel?: () => Promise<boolean>): Promise<SandboxWaitResult>;
   remove(): Promise<void>;
 }
 
@@ -164,8 +165,30 @@ export async function createSandboxContainer(
 export async function startContainerAndWait(
   container: Container,
   timeoutMs: number,
+  shouldCancel?: () => Promise<boolean>,
 ): Promise<SandboxWaitResult> {
   let timer: NodeJS.Timeout | undefined;
+  let cancellationTimer: NodeJS.Timeout | undefined;
+  let checkingCancellation = false;
+  const cancellation = shouldCancel
+    ? new Promise<"cancelled">((resolve) => {
+        const check = async (): Promise<void> => {
+          if (checkingCancellation) return;
+          checkingCancellation = true;
+          try {
+            if (await shouldCancel()) resolve("cancelled");
+          } catch {
+            // A transient DB read failure must not kill a healthy build.
+          } finally {
+            checkingCancellation = false;
+          }
+        };
+        void check();
+        cancellationTimer = setInterval(() => void check(), 1_000);
+        cancellationTimer.unref();
+      })
+    : new Promise<never>(() => undefined);
+
   const expiry = new Promise<"timeout">((resolve) => {
     timer = setTimeout(() => resolve("timeout"), timeoutMs);
     timer.unref();
@@ -175,7 +198,16 @@ export async function startContainerAndWait(
     const winner = await Promise.race([
       container.wait().then((result) => ({ kind: "exited" as const, result })),
       expiry,
+      cancellation,
     ]);
+    if (winner === "cancelled") {
+      try {
+        await container.kill();
+      } catch {
+        // The container may have exited between the DB check and the kill.
+      }
+      return { exitCode: null, timedOut: false, cancelled: true };
+    }
     if (winner === "timeout") {
       try {
         await container.kill();
@@ -187,6 +219,7 @@ export async function startContainerAndWait(
     return { exitCode: winner.result.StatusCode ?? null, timedOut: false };
   } finally {
     if (timer) clearTimeout(timer);
+    if (cancellationTimer) clearInterval(cancellationTimer);
   }
 }
 
@@ -199,7 +232,8 @@ export function createSandboxLauncher(docker: DockerLike, env: WorkerEnv): Sandb
       const container = await createSandboxContainer(docker, env, input);
       const handle: SandboxHandle = {
         containerId: container.id,
-        waitFor: (timeoutMs: number) => startContainerAndWait(container, timeoutMs),
+        waitFor: (timeoutMs: number, shouldCancel?: () => Promise<boolean>) =>
+          startContainerAndWait(container, timeoutMs, shouldCancel),
         remove: async () => {
           active.delete(handle);
           await container.remove({ force: true });

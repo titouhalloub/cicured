@@ -127,10 +127,15 @@ function makeDbStub(
       calls.joinCount += 1;
       return joined;
     },
+    leftJoin: () => {
+      calls.joinCount += 1;
+      return joined;
+    },
     where: (arg: unknown) => {
       calls.where.push(arg);
       return terminal;
     },
+    groupBy: (..._args: unknown[]) => terminal,
     orderBy: (...args: unknown[]) => {
       calls.orderBy.push(args);
       return Promise.resolve(rows);
@@ -169,6 +174,10 @@ function makeDbStub(
           return Promise.resolve(rows);
         },
         innerJoin: () => {
+          calls.joinCount += 1;
+          return joined;
+        },
+        leftJoin: () => {
           calls.joinCount += 1;
           return joined;
         },
@@ -522,9 +531,10 @@ describe("RunsService.suggestionsForRun (M4b-2a: GET /runs/:id/suggestions)", ()
 
     // findings -> runs -> projects: three joins, filtered on findings.run_id.
     expect(calls.joinCount).toBe(3);
-    // Two filters: getOwnedRun's runs.id lookup, then the run scoping.
-    expect(calls.where).toHaveLength(2);
-    expect(whereColumnName(calls.where[1])).toBe("run_id");
+    // Three filters: getOwnedRun's runs.id lookup, its LLM-cost ledger lookup,
+    // then the suggestions query scoped to findings.run_id.
+    expect(calls.where).toHaveLength(3);
+    expect(whereColumnName(calls.where[2])).toBe("run_id");
     expect(suggestions).toEqual([
       {
         id: SUGGESTION_ID,

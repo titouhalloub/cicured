@@ -201,15 +201,25 @@ describe("UsageService.getSummary", () => {
     breakdown: { category: string | null; ruleId: string | null; bugCount: number; totalCostUsd: string | null }[];
   }
 
+  interface SummaryQueryChain {
+    groupBy(): SummaryQueryChain;
+    orderBy(): SummaryQueryChain;
+    limit(n: number): Promise<unknown[]>;
+    then<TResult1 = unknown, TResult2 = never>(
+      onfulfilled?: ((value: unknown[]) => TResult1 | PromiseLike<TResult1>) | null,
+      onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+    ): Promise<TResult1 | TResult2>;
+  }
+
   /** Query-chain stub covering the totals, grouped category, model and rule queries. */
   function makeSummaryDb(rows: SummaryDbRows): Database {
-    const grouped = (result: unknown[]) => {
-      const chain: any = {};
-      chain.groupBy = () => chain;
-      chain.orderBy = () => chain;
-      chain.limit = async (n: number) => result.slice(0, n);
-      chain.then = (resolve: (value: unknown[]) => unknown, reject?: (reason: unknown) => unknown) =>
-        Promise.resolve(result).then(resolve, reject);
+    const grouped = (result: unknown[]): SummaryQueryChain => {
+      const chain: SummaryQueryChain = {
+        groupBy: () => chain,
+        orderBy: () => chain,
+        limit: async (n: number) => result.slice(0, n),
+        then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
+      };
       return chain;
     };
 

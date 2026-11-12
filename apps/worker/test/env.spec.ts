@@ -27,6 +27,18 @@ describe("worker env (mirrors apps/api/src/config/env.ts)", () => {
     expect(env.SFT_DEADLINE_BUDGET_MS).toBe(1_800_000);
   });
 
+  it("accepts OpenRouter as the configured LLM provider", () => {
+    const env = EnvSchema.parse({
+      ...VALID,
+      LLM_PROVIDER: "openrouter",
+      OPENROUTER_API_KEY: "test-openrouter-key",
+      LLM_MODEL: "openai/gpt-4.1-mini",
+    });
+    expect(env.LLM_PROVIDER).toBe("openrouter");
+    expect(env.OPENROUTER_API_KEY).toBe("test-openrouter-key");
+    expect(env.LLM_MODEL).toBe("openai/gpt-4.1-mini");
+  });
+
   it("defaults the runner mount to the pinned artifact", () => {
     const env = EnvSchema.parse(VALID);
     expect(env.SFT_RUNNER_HOST_PATH).toMatch(/packages[/\\]runner[/\\]sft-dev\.mjs$/);

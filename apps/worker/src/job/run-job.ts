@@ -253,7 +253,10 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       const archiver = deps.createArchiver(runId);
       logStream = await deps.attach({ containerId: handle.containerId, runId, archiver });
 
-      const waitResult = await handle.waitFor(deps.env.SFT_DEADLINE_BUDGET_MS);
+      const waitResult = await handle.waitFor(
+        deps.env.SFT_DEADLINE_BUDGET_MS,
+        () => deps.repository.isRunCancelled?.(runId) ?? Promise.resolve(false),
+      );
       // Drain the tail before extracting the report.
       await stopLogs();
 
@@ -261,6 +264,30 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       // archiver never throws; on failure s3Key is null and the run continues
       // (report extraction decides the outcome, not the log upload).
       const flushed = await archiver.flush();
+
+      // Cancellation is persisted by the API before it attempts queue removal.
+      // The worker owns sandbox termination and final log archival.
+      const cancellationRequested =
+        waitResult.cancelled === true || (await deps.repository.isRunCancelled?.(runId)) === true;
+      if (cancellationRequested) {
+        const finishedAt = new Date();
+        await deps.repository.finalizeRun(runId, {
+          status: "cancelled",
+          exitCode: null,
+          failureKind: "cancelled",
+          finishedAt,
+          buildMinutes: buildMinutes(startedAt, finishedAt),
+          s3LogKey: flushed.s3Key,
+          logArchive:
+            flushed.stdoutBytes > 0 || flushed.stderrBytes > 0
+              ? { stdoutBytes: flushed.stdoutBytes, stderrBytes: flushed.stderrBytes }
+              : null,
+        });
+        finalized = true;
+        await publishEnd(deps, runId, "cancelled", null);
+        logger.info("run cancelled; sandbox terminated and logs archived");
+        return { runId, status: "cancelled", exitCode: null, failureKind: "cancelled" };
+      }
 
       // Phase 3c-2: read the graph while the staging directory still exists —
       // report extraction (classifyOutcome) removes it afterwards. Missing is
@@ -368,7 +395,7 @@ export function createRunJob(deps: RunJobDeps): RunJob {
         }
       }
 
-      await deps.repository.finalizeRun(runId, {
+      const persisted = await deps.repository.finalizeRun(runId, {
         status: outcome.status,
         exitCode: outcome.exitCode,
         failureKind: outcome.failureKind,
@@ -381,6 +408,14 @@ export function createRunJob(deps: RunJobDeps): RunJob {
             ? { stdoutBytes: flushed.stdoutBytes, stderrBytes: flushed.stderrBytes }
             : null,
       });
+      if (persisted === false) {
+        if (await deps.repository.isRunCancelled?.(runId)) {
+          finalized = true;
+          await publishEnd(deps, runId, "cancelled", null);
+          return { runId, status: "cancelled", exitCode: null, failureKind: "cancelled" };
+        }
+        throw new Error(`run ${runId} was finalized by another process`);
+      }
       finalized = true;
       // Only now, so the client learns the final status from the stream itself.
       await publishEnd(deps, runId, outcome.status, outcome.exitCode);
@@ -413,6 +448,12 @@ export function createRunJob(deps: RunJobDeps): RunJob {
         ...(outcome.reportPath ? { reportPath: outcome.reportPath } : {}),
       };
     } catch (error) {
+      if (await deps.repository.isRunCancelled?.(runId)) {
+        finalized = true;
+        await publishEnd(deps, runId, "cancelled", null);
+        logger.info("run cancellation won the finalization race");
+        return { runId, status: "cancelled", exitCode: null, failureKind: "cancelled" };
+      }
       if (!finalized) {
         await markRunnerCrash(deps, runId, startedAt);
       }

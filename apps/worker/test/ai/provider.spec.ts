@@ -50,6 +50,7 @@ describe("OpenRouter provider", () => {
     const call = fetchMock.mock.calls[0];
     if (!call) throw new Error("Expected OpenRouter fetch to be called");
     const [url, request] = call;
+    if (!request) throw new Error("Expected OpenRouter request options");
     expect(String(url)).toBe("https://openrouter.ai/api/v1/chat/completions");
     expect((request.headers as Record<string, string>).Authorization).toBe(
       "Bearer test-openrouter-key",

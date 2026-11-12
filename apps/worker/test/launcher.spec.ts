@@ -224,6 +224,24 @@ describe("createSandboxContainer (Spec §8 hardening)", () => {
     expect(created).toHaveLength(0);
   });
 
+  it("kills the sandbox when the run is cancelled while waiting", async () => {
+    const { docker, container } = makeDockerDouble();
+    (container.wait as ReturnType<typeof vi.fn>).mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    const launcher = (await import("../src/sandbox/launcher")).createSandboxLauncher(
+      docker,
+      envOf(),
+    );
+    const handle = await launcher.launch(INPUT);
+
+    const result = await handle.waitFor(10_000, async () => true);
+
+    expect(result).toEqual({ exitCode: null, timedOut: false, cancelled: true });
+    expect(container.kill).toHaveBeenCalledTimes(1);
+    await handle.remove();
+  });
+
   it("removes a created container when start fails", async () => {
     const { docker, container } = makeDockerDouble();
     (container.start as ReturnType<typeof vi.fn>).mockRejectedValueOnce(

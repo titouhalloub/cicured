@@ -3,6 +3,36 @@ import type { LlmProvider, LlmRequest, LlmResponse, ProviderConfig } from "./typ
 import type { ModelPricing } from "@sft/schemas";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
+
+interface AnthropicTextBlock {
+  type: string;
+  text?: string;
+}
+
+interface AnthropicUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+}
+
+interface AnthropicResponse {
+  content: AnthropicTextBlock[];
+  usage?: AnthropicUsage;
+  model?: string;
+}
+
+function extractText(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const content = (payload as { content?: unknown }).content;
+  if (!Array.isArray(content)) return null;
+  for (const block of content as AnthropicTextBlock[]) {
+    if (typeof block === "object" && block !== null && block.type === "text") {
+      return typeof block.text === "string" ? block.text : null;
+    }
+  }
+  return null;
+}
 export class AnthropicProvider implements LlmProvider {
   readonly providerId: LlmProviderId = "anthropic";
   readonly model: string;

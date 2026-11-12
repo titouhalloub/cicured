@@ -220,17 +220,23 @@ export class WebhooksService {
 
     const summaries: string[] = [];
     const comments: Array<{ path: string; position: number; body: string }> = [];
-    // Billed usage across every hunk — feeds the cost receipt footer.
+    // Billed usage across successfully reviewed hunks — feeds the cost receipt footer.
     let inputTokens = 0;
     let outputTokens = 0;
+    let successfulHunks = 0;
+    let failedHunks = 0;
+    const reviewHunks = hunks.slice(0, MAX_REVIEW_HUNKS);
     // Wall-clock of the review loop — stored as llm_calls.duration_ms.
     const reviewStartedAt = Date.now();
-    for (const hunk of hunks.slice(0, MAX_REVIEW_HUNKS)) {
+    for (const hunk of reviewHunks) {
       let review: Awaited<ReturnType<DiffReviewLlm["reviewHunk"]>>;
       try {
         review = await this.llm.reviewHunk(hunk);
+        successfulHunks += 1;
       } catch (error) {
-        // One failed hunk must not sink the whole review.
+        // One failed hunk must not sink the whole review, but a fully failed
+        // review must never be represented as a clean PR.
+        failedHunks += 1;
         const reason = error instanceof Error ? error.message : "unknown error";
         this.logger.warn(`diff review hunk failed for ${hunk.path}: ${reason}`);
         continue;
@@ -255,6 +261,35 @@ export class WebhooksService {
         });
       }
     }
+    // A review where every provider call failed is not a clean review. Do not
+    // create a zero-token billing row: no successful model response exists.
+    if (successfulHunks === 0) {
+      this.logger.warn(
+        `PR review failed for ${repository.full_name}#${prNumber}: ${failedHunks}/${reviewHunks.length} hunks failed`,
+      );
+      // Make the failure visible on the PR itself; a webhook's HTTP 200 alone
+      // is not enough to distinguish this from a clean review.
+      try {
+        await this.github.createPullRequestReview(
+          installation.id,
+          owner,
+          repo,
+          prNumber,
+          commitSha,
+          [
+            "## Cicured AI review",
+            "",
+            `> ⚠️ **Review could not be completed:** all ${reviewHunks.length} diff hunks failed model review. No clean-review conclusion was produced. Trigger a new PR update after the provider issue is resolved to retry.`,
+          ].join("\n"),
+          [],
+        );
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "unknown error";
+        this.logger.warn(`could not post PR review failure notice: ${reason}`);
+      }
+      return { status: "review-failed", ...(runId !== undefined ? { runId } : {}) };
+    }
+
     const costUsd =
       (inputTokens / 1_000_000) * INPUT_TOKEN_USD_PER_M +
       (outputTokens / 1_000_000) * OUTPUT_TOKEN_USD_PER_M;
@@ -296,25 +331,39 @@ export class WebhooksService {
       );
     }
 
-    if (summaries.length === 0 && comments.length === 0) {
+    if (summaries.length === 0 && comments.length === 0 && failedHunks === 0) {
       return { status: "no-findings", ...(runId !== undefined ? { runId } : {}) };
     }
 
-    const summaryBlock = summaries.length > 0 ? summaries.join("\n\n") : "Inline comments below.";
+    const summaryBlock = summaries.length > 0 ? summaries.join("\n\n") : "No findings in the hunks reviewed successfully.";
+    const partialNotice =
+      failedHunks > 0
+        ? `> ⚠️ **Partial review:** Cicured could not review ${failedHunks} of ${reviewHunks.length} diff hunks because the model request or response failed. Findings are incomplete; do not interpret this as a clean PR.`
+        : "";
 
     const receipt =
       `Cost of this review: ${formatUsd(costUsd)} · ` +
       `Estimated tokens saved: ${TOKENS_SAVED_ESTIMATE.toLocaleString("en-US")}`;
+    const reviewBody = [
+      "## Cicured AI review",
+      partialNotice,
+      summaryBlock,
+      "---",
+      `*${receipt}*`,
+    ].filter(Boolean).join("\n\n");
     await this.github.createPullRequestReview(
       installation.id,
       owner,
       repo,
       prNumber,
       commitSha,
-      `## Cicured AI review\n\n${summaryBlock}\n\n---\n*${receipt}*`,
+      reviewBody,
       comments,
     );
-    return { status: "review-posted", ...(runId !== undefined ? { runId } : {}) };
+    return {
+      status: failedHunks > 0 ? "review-partial" : "review-posted",
+      ...(runId !== undefined ? { runId } : {}),
+    };
   }
 
   /**

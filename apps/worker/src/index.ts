@@ -4,6 +4,8 @@ import { createLogger } from "./common/secrets";
 import { createDb } from "./db";
 import { assertRunnerArtifact, loadDotEnvFile, loadEnv } from "./env";
 import { createGitHubClient } from "./github/client";
+
+const SANDBOX_REPO_PREFIX = "/workspace/repo/";
 import { mintInstallationToken } from "./github/token";
 import { createRunJob } from "./job/run-job";
 import { attachAndStream } from "./logs/attach";
@@ -42,6 +44,7 @@ async function main(): Promise<void> {
     logger.info("[sft-worker] LLM disabled: ANTHROPIC_API_KEY not set");
   }
   const llmCache = createLlmCache(redis, env.LLM_CACHE_TTL_SECONDS);
+  const githubClient = createGitHubClient(env);
 
   // PUBLISH is an ordinary command, so the BullMQ client can carry the log
   // traffic; only the API needs a dedicated subscriber connection.
@@ -61,7 +64,15 @@ async function main(): Promise<void> {
     attach: ({ containerId, runId, archiver }) =>
       attachAndStream(docker, containerId, runId, logPublisher, logger, archiver),
     mintToken: (installationId) => mintInstallationToken(installationId, env),
-    githubClient: createGitHubClient(env),
+    githubClient,
+    getFindingSnippet: ({ repoFullName, sha, file, line, token }) => {
+      const [owner, repo, ...extra] = repoFullName.split("/");
+      if (!owner || !repo || extra.length > 0) return Promise.resolve("");
+      const relativeFile = file.startsWith(SANDBOX_REPO_PREFIX)
+        ? file.slice(SANDBOX_REPO_PREFIX.length)
+        : file;
+      return githubClient.getFileSnippet(owner, repo, relativeFile, sha, line, token);
+    },
     extractReport: ({ containerId, runId }) =>
       extractAndValidateReport(
         docker,

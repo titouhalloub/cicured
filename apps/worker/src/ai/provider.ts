@@ -1,5 +1,6 @@
 import type { WorkerEnv } from "../env";
 import { createAnthropicProvider } from "./providers/anthropic";
+import { createOpenRouterProvider } from "./providers/openrouter";
 
 export interface LlmMessage {
   system: string;
@@ -21,28 +22,36 @@ export interface LlmProvider {
 }
 
 /**
- * Instantiate the configured provider.
- *
- * `ANTHROPIC_API_KEY` is required and is only ever read from env (never from
- * code/logs). Returns null when the key or a tie-breaker config is missing, so
- * the caller can skip the suggestion stage without special-casing the error.
+ * Instantiate the configured provider. A missing key disables suggestions
+ * without preventing the worker from booting; the deterministic review stages
+ * continue to run as before.
  */
 export function createLlmProvider(env: WorkerEnv): LlmProvider | null {
-  const provider = env.LLM_PROVIDER;
   const model = env.LLM_MODEL;
-  const apiKey = env.ANTHROPIC_API_KEY;
-  if (!provider || !model) {
-    if (!provider) console.error("[sft-worker] LLM_PROVIDER is not set in env");
-    if (!model) console.error("[sft-worker] LLM_MODEL is not set in env");
+  if (!model) {
+    console.error("[sft-worker] LLM_MODEL is not set in env");
     return null;
   }
-  if (provider !== "anthropic") {
-    console.error(`[sft-worker] unsupported LLM_PROVIDER "${provider}"`);
-    return null;
+
+  switch (env.LLM_PROVIDER) {
+    case "anthropic": {
+      if (!env.ANTHROPIC_API_KEY) {
+        console.error("[sft-worker] ANTHROPIC_API_KEY is not set");
+        return null;
+      }
+      return createAnthropicProvider(env.ANTHROPIC_API_KEY, model);
+    }
+    case "openrouter": {
+      if (!env.OPENROUTER_API_KEY) {
+        console.error("[sft-worker] OPENROUTER_API_KEY is not set");
+        return null;
+      }
+      return createOpenRouterProvider(env.OPENROUTER_API_KEY, model);
+    }
+    default: {
+      const exhaustive: never = env.LLM_PROVIDER;
+      console.error(`[sft-worker] unsupported LLM_PROVIDER "${exhaustive}"`);
+      return null;
+    }
   }
-  if (!apiKey) {
-    console.error("[sft-worker] ANTHROPIC_API_KEY is not set");
-    return null;
-  }
-  return createAnthropicProvider(apiKey, model);
 }

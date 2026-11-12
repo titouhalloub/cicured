@@ -31,9 +31,9 @@ function mapSeverity(value: string | undefined): ParsedFinding["severity"] {
 
 /**
  * Parse Semgrep JSON output into findings.
- * Never throws: on invalid JSON returns [] and pushes "semgrep: invalid JSON"
- * into the optional warnings array. Skips results missing check_id, path, or
- * start.line. Does not deduplicate; preserves Semgrep's result order.
+ * Never throws: on invalid JSON or a missing results array returns [] and
+ * pushes a warning into the optional warnings array. Skips results missing
+ * check_id, path, or start.line. Does not deduplicate; preserves result order.
  */
 export function parseSemgrep(
   stdout: string,
@@ -51,6 +51,7 @@ export function parseSemgrep(
     parsed === null ||
     !Array.isArray((parsed as { results?: unknown }).results)
   ) {
+    warnings?.push("semgrep: missing results array");
     return [];
   }
   const findings: ParsedFinding[] = [];

@@ -25,7 +25,6 @@ import { createLogger } from "../src/common/secrets";
 import { buildSuggestionPrompt } from "../src/ai/context";
 import type * as ContextModule from "../src/ai/context";
 import type { FindingsWithId } from "../src/ai/generate";
-import type * as GenerateModule from "../src/ai/generate";
 import { makeEnv, TEST_ENCRYPTION_KEY } from "./test-utils";
 
 // Phase 3c-2 spies: wrap the real implementations so the rest of the job flow
@@ -38,22 +37,6 @@ vi.mock("../src/ai/context", async (importOriginal) => {
   const actual = await importOriginal<typeof ContextModule>();
   return { ...actual, buildSuggestionPrompt: vi.fn(actual.buildSuggestionPrompt) };
 });
-// The M4a snippet placeholder returns "" and skips generation before the
-// prompt stage; tests need a snippet to observe the neighborhood threading.
-// Everything else runs through the real implementation.
-vi.mock("../src/ai/generate", async (importOriginal) => {
-  const actual = await importOriginal<typeof GenerateModule>();
-  return {
-    ...actual,
-    generateSuggestions: (
-      findings: Parameters<typeof actual.generateSuggestions>[0],
-      _snippetFor: Parameters<typeof actual.generateSuggestions>[1],
-      options: Parameters<typeof actual.generateSuggestions>[2],
-    ): ReturnType<typeof actual.generateSuggestions> =>
-      actual.generateSuggestions(findings, async () => "const x = 1;", options),
-  };
-});
-
 const RUN_ID = "11111111-1111-4111-8111-111111111111";
 const TOKEN = "ghs_supersecrettokenvalue0123456789";
 
@@ -77,6 +60,7 @@ function makeRun(status: RunWithProject["run"]["status"] = "queued"): RunWithPro
       id: RUN_ID,
       projectId: "22222222-2222-4222-8222-222222222222",
       branch: "main",
+      sha: "0123456789abcdef0123456789abcdef01234567",
       trigger: "manual",
       status,
       exitCode: null,
@@ -125,6 +109,7 @@ function makeDeps(options: {
     stops: 0,
     published: [] as unknown[],
     insertedFindings: [] as FindingsWithFingerprint[][],
+    insertedSuggestions: [] as unknown[][],
     flushes: 0,
     flushedFor: [] as string[],
     flushResult: { s3Key: "logs/test-run", stdoutBytes: 100, stderrBytes: 50 } as FlushResult,
@@ -146,7 +131,9 @@ function makeDeps(options: {
       calls.insertedFindings.push(findings);
     },
     getFindingsByFingerprints: async () => [],
-    insertSuggestions: async () => undefined,
+    insertSuggestions: async (_runId, suggestions) => {
+      calls.insertedSuggestions.push(suggestions);
+    },
   };
 
   const sandbox: SandboxLauncher = {
@@ -578,19 +565,20 @@ describe("run-job code graph plumbing (Phase 3c-2)", () => {
 
   /** Provider returning a valid draft; map-backed cache (no Redis, no network). */
   function llmStubs() {
+    const complete = vi.fn(async () => ({
+      text: JSON.stringify({
+        patchDiff: "--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1 +1 @@\n-a\n+b\n",
+        explanation: "Fix the missing name.",
+        confidence: 0.9,
+        filesTouched: ["src/x.ts"],
+      }),
+      promptTokens: 10,
+      completionTokens: 10,
+    }));
     const provider: LlmProvider = {
       name: "stub",
       model: "test-model",
-      complete: async () => ({
-        text: JSON.stringify({
-          patchDiff: "--- a/src/x.ts\n+++ b/src/x.ts\n@@ -1 +1 @@\n-a\n+b\n",
-          explanation: "Fix the missing name.",
-          confidence: 0.9,
-          filesTouched: ["src/x.ts"],
-        }),
-        promptTokens: 10,
-        completionTokens: 10,
-      }),
+      complete,
     };
     const store = new Map<string, SuggestionDraft>();
     const cache: LlmCache = {
@@ -599,7 +587,7 @@ describe("run-job code graph plumbing (Phase 3c-2)", () => {
         store.set(key, value);
       },
     };
-    return { provider, cache };
+    return { provider, cache, complete };
   }
 
   /** Full AI-stage deps with the given graph state staged in REPORTS_DIR. */
@@ -617,10 +605,62 @@ describe("run-job code graph plumbing (Phase 3c-2)", () => {
     const { provider, cache } = llmStubs();
     deps.llmProvider = provider;
     deps.llmCache = cache;
+    deps.getFindingSnippet = vi.fn(async () => "const x = 1;");
+    deps.repository.insertSuggestions = vi.fn(async () => undefined);
     vi.mocked(blastRadiusFor).mockClear();
     vi.mocked(buildSuggestionPrompt).mockClear();
     return deps;
   }
+
+  it("resolves source context, invokes the real provider path, and persists the suggestion", async () => {
+    const deps = await prepareAI("valid");
+
+    await createRunJob(deps)(RUN_ID);
+
+    expect(deps.getFindingSnippet).toBeDefined();
+    expect(vi.mocked(deps.getFindingSnippet!)).toHaveBeenCalledWith({
+      repoFullName: "acme/web",
+      sha: "0123456789abcdef0123456789abcdef01234567",
+      file: "src/x.ts",
+      line: 3,
+      token: TOKEN,
+    });
+    expect(vi.mocked(deps.llmProvider!.complete)).toHaveBeenCalledTimes(1);
+    expect(deps.repository.insertSuggestions).toHaveBeenCalledTimes(1);
+    expect(deps.repository.insertSuggestions).toHaveBeenCalledWith(
+      RUN_ID,
+      [expect.objectContaining({ findingId: FINDING_WITH_ID.id })],
+    );
+  });
+
+  it("prefers the runner's scanned SHA when the run row has no SHA", async () => {
+    const deps = await prepareAI("valid");
+    const scannedSha = "abcdefabcdefabcdefabcdefabcdefabcdefabcd";
+    deps.repository.loadRunWithProject = vi.fn(async () => {
+      const loaded = makeRun();
+      return {
+        ...loaded,
+        run: { ...loaded.run, sha: null },
+      };
+    });
+    deps.extractReport = vi.fn(async () => {
+      const extracted = failingReport();
+      return {
+        ...extracted,
+        report: { ...extracted.report, gitSha: scannedSha },
+      };
+    });
+
+    await createRunJob(deps)(RUN_ID);
+
+    expect(vi.mocked(deps.getFindingSnippet!)).toHaveBeenCalledWith({
+      repoFullName: "acme/web",
+      sha: scannedSha,
+      file: "src/x.ts",
+      line: 3,
+      token: TOKEN,
+    });
+  });
 
   it("reads sft-graph.json from the staging dir when present", async () => {
     const deps = await prepareAI("valid");

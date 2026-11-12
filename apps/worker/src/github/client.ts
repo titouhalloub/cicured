@@ -2,14 +2,29 @@ import { registerSecret, unregisterSecret } from "../common/secrets";
 import { mintInstallationToken, type GitHubAppCredentials } from "./token";
 
 const REQUEST_TIMEOUT_MS = 15_000;
+const MAX_SOURCE_FILE_BYTES = 1_000_000;
+const MAX_SOURCE_LINE_CHARS = 600;
 
 /**
- * Minimal GitHub REST client for the worker (v2 combined pipeline): posts the
- * post-run diagnosis comment back onto the PR. The diff review itself lives in
- * the API (apps/api/src/auth/github.client.ts) — mirrored here only as far as
- * needed, because the worker must never import the NestJS app (Spec §0).
+ * Minimal GitHub REST client for the worker (v2 combined pipeline): reads
+ * source context at the reviewed commit and posts post-run diagnosis comments.
+ * The diff review itself lives in the API (apps/api/src/auth/github.client.ts)
+ * — mirrored here only as far as needed, because the worker must never import
+ * the NestJS app (Spec §0).
  */
 export interface WorkerGitHubClient {
+  /**
+   * Fetches a bounded source snippet at the exact reviewed commit. The
+   * installation token is supplied by the active run and is never logged.
+   */
+  getFileSnippet(
+    owner: string,
+    repo: string,
+    filePath: string,
+    ref: string,
+    line: number,
+    token: string,
+  ): Promise<string>;
   /**
    * Posts a general PR comment through the issues endpoint
    * (`POST /repos/{owner}/{repo}/issues/{prNumber}/comments`) — a normal
@@ -26,6 +41,77 @@ export interface WorkerGitHubClient {
 
 export function createGitHubClient(env: GitHubAppCredentials): WorkerGitHubClient {
   return {
+    async getFileSnippet(owner, repo, filePath, ref, line, token): Promise<string> {
+      const normalized = filePath.replace(/\\/g, "/");
+      const segments = normalized.split("/");
+      if (
+        !owner ||
+        !repo ||
+        repo.includes("/") ||
+        !ref ||
+        !token ||
+        !normalized ||
+        normalized.startsWith("/") ||
+        segments.some((segment) => !segment || segment === "." || segment === "..") ||
+        !Number.isSafeInteger(line) ||
+        line < 1
+      ) {
+        return "";
+      }
+
+      const encodedPath = segments.map(encodeURIComponent).join("/");
+      const response = await fetch(
+        `${env.GITHUB_API_BASE}/repos/${owner}/${repo}/contents/${encodedPath}?ref=${encodeURIComponent(ref)}`,
+        {
+          headers: {
+            accept: "application/vnd.github+json",
+            authorization: `Bearer ${token}`,
+            "user-agent": "sft-dev",
+            "x-github-api-version": "2022-11-28",
+          },
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        },
+      );
+      if (response.status === 404) return "";
+      if (!response.ok) {
+        // Do not copy remote error bodies into logs; they may contain sensitive
+        // repository data and are not needed to diagnose the HTTP status.
+        throw new Error(`GitHub source read responded ${response.status}`);
+      }
+
+      const body = (await response.json()) as {
+        type?: string;
+        encoding?: string;
+        size?: number;
+        content?: string;
+      };
+      // Contents API only returns inline base64 for reasonably small files.
+      // Large files are deliberately skipped rather than fetched unbounded.
+      if (
+        body.type !== "file" ||
+        body.encoding !== "base64" ||
+        typeof body.content !== "string" ||
+        body.content.length > 1_400_000 ||
+        (typeof body.size === "number" && body.size > MAX_SOURCE_FILE_BYTES)
+      ) {
+        return "";
+      }
+
+      const source = Buffer.from(body.content.replace(/[\r\n]/g, ""), "base64").toString("utf8");
+      if (source.includes("\u0000")) return "";
+      const lines = source.split(/\r?\n/);
+      const firstLine = Math.max(1, line - 20);
+      const lastLine = Math.min(lines.length, line + 20);
+      return lines
+        .slice(firstLine - 1, lastLine)
+        .map((text, index) => {
+          const clipped = text.length > MAX_SOURCE_LINE_CHARS
+            ? `${text.slice(0, MAX_SOURCE_LINE_CHARS)} …[line truncated]`
+            : text;
+          return `${firstLine + index}: ${clipped}`;
+        })
+        .join("\n");
+    },
     async postPullRequestComment(owner, repo, prNumber, installationId, body) {
       // Minted per comment (1h TTL, clone-less use); registered so the log
       // masker scrubs it if any line ever carries it (Spec §8: tokens never

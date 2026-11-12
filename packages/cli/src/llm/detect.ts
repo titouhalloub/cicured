@@ -1,8 +1,26 @@
-import os from "node:os";
 import path from "node:path";
 import { existsSync, readFileSync } from "node:fs";
+import type { LlmProviderId, ModelPricing } from "@sft/schemas";
 import type { ProviderConfig } from "./types";
 import { lookupPricing } from "./pricing";
+
+const PROVIDER_IDS = ["anthropic", "openai", "openai-compatible", "gemini", "ollama"] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isProviderId(value: unknown): value is LlmProviderId {
+  return typeof value === "string" && (PROVIDER_IDS as readonly string[]).includes(value);
+}
+
+function parsePricing(value: unknown): ModelPricing | undefined {
+  if (!isRecord(value)) return undefined;
+  const { inputPerM, outputPerM } = value;
+  if (typeof inputPerM !== "number" || !Number.isFinite(inputPerM) || inputPerM < 0) return undefined;
+  if (typeof outputPerM !== "number" || !Number.isFinite(outputPerM) || outputPerM < 0) return undefined;
+  return { inputPerM, outputPerM };
+}
 
 export function detectProvider(): ProviderConfig {
   // 1. Explicit override
@@ -64,33 +82,48 @@ export function detectProvider(): ProviderConfig {
   );
 }
 
-function tryReadConfig(): any {
-  const p = path.join(process.cwd(), "sft-dev.config.json");
-  if (!existsSync(p)) return null;
+function tryReadConfig(): { llm?: unknown } | null {
+  const configPath = path.join(process.cwd(), "sft-dev.config.json");
+  if (!existsSync(configPath)) return null;
   try {
-    return JSON.parse(readFileSync(p, "utf8"));
+    const parsed: unknown = JSON.parse(readFileSync(configPath, "utf8"));
+    if (!isRecord(parsed)) return null;
+    return { llm: parsed.llm };
   } catch {
     return null;
   }
 }
 
-function resolveConfig(llm: any): ProviderConfig {
-  const provider = llm.provider as string;
-  if (!provider) throw new Error("llm.provider is required when llm is set in config");
-  const model = llm.model as string;
-  if (!model) throw new Error("llm.model is required");
-  const apiKey =
-    (llm.apiKeyEnv && process.env[llm.apiKeyEnv as string]) ||
-    (llm.apiKey as string) ||
-    "";
-  if (!apiKey && provider !== "ollama") {
-    throw new Error(`No API key found for provider "${provider}". Set ${llm.apiKeyEnv ?? "llm.apiKey"}.`);
+function resolveConfig(value: unknown): ProviderConfig {
+  if (!isRecord(value)) throw new Error("llm must be an object in sft-dev.config.json");
+
+  const provider = value.provider;
+  if (!isProviderId(provider)) {
+    throw new Error(`llm.provider must be one of: ${PROVIDER_IDS.join(", ")}`);
   }
+  const model = value.model;
+  if (typeof model !== "string" || model.length === 0) {
+    throw new Error("llm.model is required");
+  }
+
+  const apiKeyEnv = typeof value.apiKeyEnv === "string" ? value.apiKeyEnv : undefined;
+  const configuredApiKey = typeof value.apiKey === "string" ? value.apiKey : "";
+  const apiKey = (apiKeyEnv ? process.env[apiKeyEnv] : undefined) || configuredApiKey;
+  if (!apiKey && provider !== "ollama") {
+    throw new Error(`No API key found for provider "${provider}". Set ${apiKeyEnv ?? "llm.apiKey"}.`);
+  }
+
+  const baseUrl = typeof value.baseUrl === "string" ? value.baseUrl : undefined;
+  const pricing = parsePricing(value.pricing);
+  if (value.pricing !== undefined && pricing === undefined) {
+    throw new Error("llm.pricing must contain non-negative numeric inputPerM and outputPerM values");
+  }
+
   return {
-    provider: provider as any,
+    provider,
     model,
-    baseUrl: llm.baseUrl,
+    ...(baseUrl ? { baseUrl } : {}),
     apiKey,
-    pricing: lookupPricing(model, llm.pricing),
+    pricing: lookupPricing(model, pricing),
   };
 }

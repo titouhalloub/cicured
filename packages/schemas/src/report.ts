@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isIsoDateTime } from "./common";
+import { FindingCategory, FindingSeverity } from "./finding";
 
 /**
  * Size caps applied by the deterministic parser (Spec §2 "the parser
@@ -17,6 +18,21 @@ export const PARSER_LIMITS = {
 const isoDateTime = z
   .string()
   .refine(isIsoDateTime, { message: "must be a valid ISO-8601 timestamp" });
+
+/**
+ * Compact, already-normalized findings from tools whose native machine output
+ * is too large to safely carry as a truncated stdout string (currently
+ * Semgrep). Keeping this separate from stdout preserves the report byte cap.
+ */
+const SftTaskFinding = z.object({
+  severity: FindingSeverity,
+  category: FindingCategory,
+  ruleId: z.string().min(1).max(300),
+  file: z.string().min(1).max(1024),
+  line: z.number().int().nonnegative(),
+  col: z.number().int().nonnegative(),
+  message: z.string().min(1).max(512),
+});
 
 /** One task entry of `sft-report.json` schema v2 (pinned runner, Spec §2). */
 export const SftTaskV2 = z.object({
@@ -39,6 +55,8 @@ export const SftTaskV2 = z.object({
   parser: z.string().min(1).optional(),
   /** Free-form parser config, validated by the parser itself at parse time. */
   parserConfig: z.unknown().optional(),
+  /** Normalized structured findings captured separately from bounded stdout. */
+  structuredFindings: z.array(SftTaskFinding).max(500).optional(),
 });
 
 export const SftSummaryV2 = z.object({
@@ -59,6 +77,8 @@ export const SftReportV2 = z.object({
   version: z.literal(2),
   finishedAt: isoDateTime,
   runnerError: z.string().nullable(),
+  /** Exact repository revision scanned by the runner, when Git metadata exists. */
+  gitSha: z.string().regex(/^[0-9a-f]{40,64}$/i).optional(),
   warnings: z.array(z.string()),
   summary: SftSummaryV2,
   tasks: z.array(SftTaskV2),

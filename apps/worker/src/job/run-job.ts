@@ -66,6 +66,14 @@ export interface RunJobDeps {
   createArchiver: (runId: string) => LogArchiver;
   /** M4b: uploader for the archived run report to S3. */
   uploadReport?: (runId: string, report: SftReportV2) => Promise<string | null>;
+  /** Read bounded source context from the exact repository commit under review. */
+  getFindingSnippet?: (input: {
+    repoFullName: string;
+    sha: string;
+    file: string;
+    line: number;
+    token: string;
+  }) => Promise<string>;
 }
 
 export interface RunJobResult {
@@ -326,12 +334,16 @@ export function createRunJob(deps: RunJobDeps): RunJob {
 
         const drafts = await generateSuggestions(
           findingsWithId,
-          async () => {
-            // M4a placeholder: the sandbox workspace is destroyed at the end of
-            // the run, so the worker cannot fetch finding-snapshot code here.
-            // A real worker would resolve `finding.file` + `finding.line` from
-            // the archived clone or a git provider and return ~5 lines.
-            return "";
+          async (finding) => {
+            const sourceSha = outcome.report?.gitSha ?? loaded.run.sha;
+            if (!deps.getFindingSnippet || !token || !sourceSha) return "";
+            return deps.getFindingSnippet({
+              repoFullName: loaded.project.repoFullName,
+              sha: sourceSha,
+              file: finding.file,
+              line: finding.line,
+              token,
+            });
           },
           options,
         );

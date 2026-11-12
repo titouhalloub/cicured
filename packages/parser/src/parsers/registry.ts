@@ -48,9 +48,25 @@ export const PARSERS: Record<string, Parser> = {
   ruff: { id: "ruff", parse: parseRuff },
   "go-test": { id: "go-test", parse: parseGoTest },
   "go-vet": { id: "go-vet", parse: parseGoVet },
-  // stderr is diagnostics only for semgrep; parseSemgrep takes stdout (+ an
-  // optional warnings sink) and never throws.
-  semgrep: { id: "semgrep", parse: (stdout, _stderr) => parseSemgrep(stdout) },
+  // stderr is diagnostics only for semgrep. Preserve parseSemgrep warnings
+  // as a visible finding instead of silently treating invalid output as clean.
+  semgrep: {
+    id: "semgrep",
+    parse: (stdout, _stderr) => {
+      const warnings: string[] = [];
+      const findings = parseSemgrep(stdout, warnings);
+      if (warnings.length === 0) return findings;
+      return [{
+        severity: "warning",
+        category: "lint",
+        ruleId: "sft-semgrep-output-invalid",
+        file: "sft-dev:semgrep",
+        line: 0,
+        col: 0,
+        message: "Semgrep output could not be parsed; security findings are unavailable.",
+      }];
+    },
+  },
   "cargo-clippy": { id: "cargo-clippy", parse: parseCargoClippy },
   "cargo-test": { id: "cargo-test", parse: parseCargoTest },
   // Config tier (Phase 3e): no name mapping — these are only reachable through

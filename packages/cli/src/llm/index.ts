@@ -1,10 +1,9 @@
 import type { LlmProvider, ProviderConfig } from "./types";
-import { z } from "zod";
 import { AnthropicProvider } from "./anthropic";
 import { OpenAiCompatProvider } from "./openai-compat";
 import { detectProvider } from "./detect";
-import { buildMessages, type SuggestInput , validateFilesTouched} from "./prompt";
-import { lookupPricing, computeCostUsd, DEFAULT_PRICING } from "./pricing";
+import { buildMessages, type SuggestInput, validateFilesTouched } from "./prompt";
+import type { LlmResponse } from "./types";
 
 export { detectProvider, buildMessages };
 export type { LlmProvider, LlmRequest, LlmResponse, ProviderConfig } from "./types";
@@ -53,7 +52,7 @@ function stripFences(text: string): string {
 export async function suggestFix(
   provider: LlmProvider,
   input: SuggestInput,
-): Promise<{ suggestion: LlmSuggestion; response: import("./types").LlmResponse }> {
+): Promise<{ suggestion: LlmSuggestion; response: LlmResponse }> {
   const { system, user } = buildMessages(input, "suggest");
   const response = await provider.complete({
     system,
@@ -84,7 +83,7 @@ export async function suggestFix(
 export async function explainFinding(
   provider: LlmProvider,
   input: SuggestInput,
-): Promise<{ text: string; response: import("./types").LlmResponse }> {
+): Promise<{ text: string; response: LlmResponse }> {
   const { system, user } = buildMessages(input, "explain");
   const response = await provider.complete({
     system,

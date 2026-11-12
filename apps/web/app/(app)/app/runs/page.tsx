@@ -1,9 +1,15 @@
 "use client";
-import { PlayCircle, XCircle } from "lucide-react";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { isTerminalRunStatus } from "@sft/schemas";
+import { PlayCircle, Square, XCircle } from "lucide-react";
+import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
 import { RunsTable } from "@/components/runs/runs-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAllRuns } from "@/lib/queries";
+import { apiFetch } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 
 /**
  * All runs across projects.
@@ -14,14 +20,44 @@ import { useAllRuns } from "@/lib/queries";
  */
 export default function RunsPage() {
   const { data, isLoading, isError, refetch } = useAllRuns();
+  const queryClient = useQueryClient();
+  const [stoppingAll, setStoppingAll] = useState(false);
+  const activeCount = data?.runs.filter((run) => !isTerminalRunStatus(run.status)).length ?? 0;
+
+  async function stopAll() {
+    setStoppingAll(true);
+    try {
+      const result = await apiFetch<{ cancelled: number; remaining: number }>("/runs/cancel-all", { method: "POST" });
+      toast.success("Stopped " + result.cancelled + " run(s)");
+      await queryClient.invalidateQueries({ queryKey: ["runs"] });
+    } catch {
+      toast.error("Could not stop active runs");
+    } finally {
+      setStoppingAll(false);
+    }
+  }
 
   return (
     <>
-      <section>
-        <h1 className="text-2xl font-medium">Runs</h1>
-        <p className="mt-1 text-sm text-text-muted-light dark:text-text-muted-dark">
-          Every build across your connected repositories, newest first.
-        </p>
+      <section className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-medium">Runs</h1>
+          <p className="mt-1 text-sm text-text-muted-light dark:text-text-muted-dark">
+            Every build across your connected repositories, newest first.
+          </p>
+        </div>
+        {activeCount > 0 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={stoppingAll}
+            onClick={() => void stopAll()}
+            className="border-red-500/30 text-red-600 hover:bg-red-500/10 dark:text-red-400"
+          >
+            <Square />
+            {stoppingAll ? "Stopping…" : "Stop all (" + activeCount + ")"}
+          </Button>
+        ) : null}
       </section>
 
       <section className="card">

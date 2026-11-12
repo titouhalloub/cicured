@@ -234,6 +234,75 @@ export class RunsService {
   }
 
   /**
+   * Cancel one owned run. The status update is the source of truth: queued
+   * BullMQ jobs are removed best-effort, while active workers poll this status
+   * and terminate their sandbox. A terminal run is never overwritten.
+   */
+  async cancelOwnedRun(
+    user: UserRow,
+    runId: string,
+  ): Promise<{ run: RunRow & { totalCostUsd: number }; cancelled: boolean }> {
+    const current = await this.getOwnedRun(user, runId);
+    if (!ACTIVE_RUN_STATUSES.includes(current.status as (typeof ACTIVE_RUN_STATUSES)[number])) {
+      return { run: current, cancelled: false };
+    }
+
+    const [updated] = await this.db
+      .update(runs)
+      .set({ status: "cancelled", failureKind: "cancelled", finishedAt: new Date() })
+      .where(and(eq(runs.id, runId), inArray(runs.status, ACTIVE_RUN_STATUSES)))
+      .returning();
+
+    if (!updated) {
+      // A worker may have finalized concurrently. Re-read rather than
+      // overwriting a terminal result or reporting a false cancellation.
+      return { run: await this.getOwnedRun(user, runId), cancelled: false };
+    }
+
+    if (current.status === "queued") {
+      // DB state already prevents a late worker from claiming this run. Queue
+      // removal is an optimization; a Redis error must not undo cancellation.
+      try {
+        await this.queue.removeQueuedRun(runId);
+      } catch {
+        // The worker will see status=cancelled and safely drop the job.
+      }
+    }
+    return { run: { ...updated, totalCostUsd: current.totalCostUsd }, cancelled: true };
+  }
+
+  /**
+   * Cancel every active run owned by this user, optionally scoped to one
+   * project. This is shared by the global Stop all and project Stop all UI.
+   */
+  async cancelActiveRuns(
+    user: UserRow,
+    projectId?: string,
+  ): Promise<{ cancelled: number; remaining: number }> {
+    if (projectId) {
+      const project = await this.projects.findOwned(user.id, projectId);
+      if (!project) throw new NotFoundException("project not found");
+    }
+    const conditions = [
+      eq(projects.userId, user.id),
+      inArray(runs.status, ACTIVE_RUN_STATUSES),
+    ];
+    if (projectId) conditions.push(eq(projects.id, projectId));
+    const active = await this.db
+      .select({ id: runs.id })
+      .from(runs)
+      .innerJoin(projects, eq(projects.id, runs.projectId))
+      .where(and(...conditions));
+    let cancelled = 0;
+    for (const row of active) {
+      const result = await this.cancelOwnedRun(user, row.id);
+      if (result.cancelled) cancelled += 1;
+    }
+    const remaining = await this.countActiveRuns(user.id);
+    return { cancelled, remaining };
+  }
+
+  /**
    * GET /runs/:id/findings — every finding for a run, worst first (Spec §5),
    * with the AI spend recorded against it (itemized fix cost).
    *

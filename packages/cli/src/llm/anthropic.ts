@@ -1,11 +1,8 @@
 import type { LlmProviderId } from "@sft/schemas";
-import { z } from "zod";
 import type { LlmProvider, LlmRequest, LlmResponse, ProviderConfig } from "./types";
-import { type SuggestInput, validateFilesTouched } from "./prompt";
-import { lookupPricing, computeCostUsd } from "./pricing";
+import type { ModelPricing } from "@sft/schemas";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL = "claude-sonnet-4-5";
 
 interface AnthropicTextBlock {
   type: string;
@@ -36,25 +33,10 @@ function extractText(payload: unknown): string | null {
   }
   return null;
 }
-
-/** Models occasionally wrap JSON in a ```json fence despite the prompt. */
-function stripFences(text: string): string {
-  const trimmed = text.trim();
-  const match = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/.exec(trimmed);
-  return match?.[1]?.trim() ?? trimmed;
-}
-
-const LlmSuggestionSchema = z.object({
-  patchDiff: z.string().min(1),
-  explanation: z.string().min(1),
-  confidence: z.number().min(0).max(1),
-  filesTouched: z.array(z.string().min(1)).min(1),
-});
-
 export class AnthropicProvider implements LlmProvider {
   readonly providerId: LlmProviderId = "anthropic";
   readonly model: string;
-  readonly pricing: import("@sft/schemas").ModelPricing;
+  readonly pricing: ModelPricing;
 
   constructor(private cfg: ProviderConfig) {
     this.model = cfg.model;

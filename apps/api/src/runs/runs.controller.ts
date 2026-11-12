@@ -75,6 +75,36 @@ export class RunsController {
     return summary;
   }
 
+  /** POST /runs/:id/cancel — cancel one run owned by the caller. */
+  @Post("runs/:id/cancel")
+  @HttpCode(200)
+  async cancelRun(
+    @CurrentUser() user: UserRow,
+    @Param("id") runId: string,
+  ): Promise<{ run: RunSummary; cancelled: boolean }> {
+    const result = await this.runsService.cancelOwnedRun(user, runId);
+    return { run: toRunSummary(result.run), cancelled: result.cancelled };
+  }
+
+  /** POST /runs/cancel-all — cancel active runs across all owned projects. */
+  @Post("runs/cancel-all")
+  @HttpCode(200)
+  async cancelAllRuns(
+    @CurrentUser() user: UserRow,
+  ): Promise<{ cancelled: number; remaining: number }> {
+    return this.runsService.cancelActiveRuns(user);
+  }
+
+  /** POST /projects/:id/runs/cancel-all — cancel active runs in one project. */
+  @Post("projects/:id/runs/cancel-all")
+  @HttpCode(200)
+  async cancelProjectRuns(
+    @CurrentUser() user: UserRow,
+    @Param("id") projectId: string,
+  ): Promise<{ cancelled: number; remaining: number }> {
+    return this.runsService.cancelActiveRuns(user, projectId);
+  }
+
   /** GET /runs/:id/report — presigned URL to the archived report (M4b). */
   @Get("runs/:id/report")
   async getReport(

@@ -103,7 +103,9 @@ export interface RunRepository {
   loadRunWithProject(runId: string): Promise<RunWithProject | null>;
   /** `queued -> running` guarded update; false when another worker claimed it. */
   claimRun(runId: string, startedAt: Date): Promise<boolean>;
-  finalizeRun(runId: string, input: FinalizeRunInput): Promise<void>;
+  finalizeRun(runId: string, input: FinalizeRunInput): Promise<boolean | void>;
+  /** Read the authoritative cancellation state while a sandbox is active. */
+  isRunCancelled?(runId: string): Promise<boolean>;
   /**
    * M3b: persist parsed findings for a run. Idempotent on the unique
    * (run_id, fingerprint) index; at most 500 rows per run.
@@ -139,7 +141,17 @@ export function createRunRepository(db: Database): RunRepository {
       return claimed.length > 0;
     },
 
-    async finalizeRun(runId: string, input: FinalizeRunInput): Promise<void> {
+    async isRunCancelled(runId: string): Promise<boolean> {
+      const [row] = await db
+        .select({ status: runs.status })
+        .from(runs)
+        .where(eq(runs.id, runId))
+        .limit(1);
+      return row?.status === "cancelled";
+    },
+
+    async finalizeRun(runId: string, input: FinalizeRunInput): Promise<boolean> {
+      const allowedStatuses = input.status === "cancelled" ? ["running", "cancelled"] as const : ["running"] as const;
       const updated = await db
         .update(runs)
         .set({
@@ -153,10 +165,17 @@ export function createRunRepository(db: Database): RunRepository {
           // M4b: only touch s3_report_key when provided.
           ...(input.s3ReportKey !== undefined ? { s3_report_key: input.s3ReportKey } : {}),
         })
-        .where(eq(runs.id, runId))
+        .where(and(eq(runs.id, runId), inArray(runs.status, allowedStatuses)))
         .returning({ id: runs.id });
       if (updated.length === 0) {
-        throw new Error(`run ${runId} disappeared while finalizing`);
+        const [current] = await db
+          .select({ status: runs.status })
+          .from(runs)
+          .where(eq(runs.id, runId))
+          .limit(1);
+        if (current?.status === "cancelled") return false;
+        if (!current) throw new Error(`run ${runId} disappeared while finalizing`);
+        return false;
       }
 
       // Segment metadata so TTL purges and SSE replays can find the S3
@@ -183,6 +202,7 @@ export function createRunRepository(db: Database): RunRepository {
             .onConflictDoNothing();
         }
       }
+      return true;
     },
 
     async insertFindings(

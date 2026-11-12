@@ -201,6 +201,34 @@ function makeDeps(options: {
   return { deps, calls, handle };
 }
 
+describe("run job cancellation", () => {
+  it("finalizes a cancelled run without extracting its report", async () => {
+    const { deps, calls, handle } = makeDeps({
+      wait: { exitCode: null, timedOut: false, cancelled: true },
+    });
+
+    const result = await createRunJob(deps)(RUN_ID);
+
+    expect(result).toMatchObject({
+      runId: RUN_ID,
+      status: "cancelled",
+      exitCode: null,
+      failureKind: "cancelled",
+    });
+    expect(calls.extractCount).toBe(0);
+    expect(calls.finalized).toHaveLength(1);
+    expect(calls.finalized[0]).toMatchObject({
+      status: "cancelled",
+      failureKind: "cancelled",
+      s3LogKey: "logs/test-run",
+    });
+    expect(calls.published).toEqual([
+      { type: "end", runId: RUN_ID, exitCode: null, status: "cancelled" },
+    ]);
+    expect(handle.remove).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("run job exit-code matrix (Spec §2)", () => {
   it("exit 0 -> success with the report stored", async () => {
     const { deps, calls } = makeDeps({ wait: { exitCode: 0, timedOut: false } });

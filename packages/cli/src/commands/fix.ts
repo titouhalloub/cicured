@@ -13,12 +13,12 @@ import {
   parseReport,
 } from "@sft/parser";
 import {
-  buildMessages,
   computeCostUsd,
   createProvider,
   suggestFix,
   type LlmSuggestion,
   type SuggestInput,
+  type LlmResponse,
 } from "../llm";
 import { appendLlmCall } from "../storage/ledger";
 import { estimateTokensAvoided } from "../storage/estimator";
@@ -126,7 +126,7 @@ export async function fixCommand(args: string[]): Promise<number> {
   };
 
   let suggestion: LlmSuggestion;
-  let llmResponse: import("../llm/types").LlmResponse;
+  let llmResponse: LlmResponse;
   try {
     const provider = createProvider();
     const result = await suggestFix(provider, input);

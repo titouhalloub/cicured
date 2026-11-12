@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { isTerminalRunStatus, type RunSummary } from "@sft/schemas";
-import { FileWarning, Lightbulb, ListChecks, Play, RefreshCw, XCircle } from "lucide-react";
+import { FileWarning, Lightbulb, ListChecks, Play, RefreshCw, Square, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { EmptyState } from "@/components/empty-state";
 import { RelativeTime } from "@/components/relative-time";
@@ -76,6 +76,7 @@ function SkeletonPage() {
 function RunHeader({ run, repoFullName }: { run: RunSummary; repoFullName: string }) {
   const qc = useQueryClient();
   const [starting, setStarting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   async function runNow() {
     setStarting(true);
@@ -90,6 +91,22 @@ function RunHeader({ run, repoFullName }: { run: RunSummary; repoFullName: strin
     }
   }
 
+  async function cancelRun() {
+    setCancelling(true);
+    try {
+      const result = await apiFetch<{ cancelled: boolean }>("/runs/" + run.id + "/cancel", { method: "POST" });
+      toast.success(result.cancelled ? "Run cancelled" : "Run already finished");
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["runs"] }),
+        qc.invalidateQueries({ queryKey: ["run", run.id] }),
+      ]);
+    } catch {
+      toast.error("Could not cancel run");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   return (
     <section className="card">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -97,10 +114,24 @@ function RunHeader({ run, repoFullName }: { run: RunSummary; repoFullName: strin
           <h1 className="text-2xl font-medium">Run {shortSha(run.sha)}</h1>
           <StatusBadge status={run.status} />
         </div>
-        <Button size="sm" disabled={starting} onClick={() => void runNow()}>
-          <Play />
-          {starting ? "Starting…" : "Run now"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {!isTerminalRunStatus(run.status) ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={cancelling}
+              onClick={() => void cancelRun()}
+              className="border-red-500/30 text-red-600 hover:bg-red-500/10 dark:text-red-400"
+            >
+              <Square />
+              {cancelling ? "Stopping…" : "Stop run"}
+            </Button>
+          ) : null}
+          <Button size="sm" disabled={starting} onClick={() => void runNow()}>
+            <Play />
+            {starting ? "Starting…" : "Run now"}
+          </Button>
+        </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Field label="Repository">{repoFullName}</Field>

@@ -1,5 +1,5 @@
 "use client";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderGit2, Rocket, XCircle } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { GitHubIcon } from "@/components/github-icon";
@@ -15,9 +15,11 @@ import { fetchProjects, type RunsPage } from "@/lib/queries";
 function ProjectCard({ project }: { project: ProjectSummary }) {
   const lastRunQuery = useQuery({
     queryKey: ["last-run", project.id],
-    queryFn: () => apiFetch<RunsPage>(`/projects/${project.id}/runs?limit=1`),
+    queryFn: () => apiFetch<RunsPage>(`/projects/${project.id}/runs?limit=50`),
   });
   const lastRun: RunSummary | undefined = lastRunQuery.data?.items[0];
+  const activeRuns = lastRunQuery.data?.items.filter((run) => run.status === "queued" || run.status === "running").length ?? 0;
+  const queryClient = useQueryClient();
 
   const triggerRun = useMutation({
     mutationFn: () =>
@@ -28,6 +30,23 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
     },
     onError: (error: Error) => {
       toast.error("Could not queue run", { description: error.message });
+    },
+  });
+
+  const cancelProjectRuns = useMutation({
+    mutationFn: () =>
+      apiFetch<{ cancelled: number; remaining: number }>("/projects/" + project.id + "/runs/cancel-all", {
+        method: "POST",
+      }),
+    onSuccess: async (result) => {
+      toast.success("Stopped " + result.cancelled + " run(s)", { description: project.repoFullName });
+      await Promise.all([
+        lastRunQuery.refetch(),
+        queryClient.invalidateQueries({ queryKey: ["runs"] }),
+      ]);
+    },
+    onError: (error: Error) => {
+      toast.error("Could not stop project runs", { description: error.message });
     },
   });
 
@@ -58,15 +77,28 @@ function ProjectCard({ project }: { project: ProjectSummary }) {
           <span className="text-sm text-text-muted-light dark:text-text-muted-dark">No runs yet</span>
         )}
 
-        <Button
-          size="sm"
-          className="gap-1.5 rounded-input bg-brand-primary text-white hover:bg-brand-primary/90"
-          disabled={triggerRun.isPending}
-          onClick={() => triggerRun.mutate()}
-        >
-          <Rocket className="h-4 w-4" />
-          {triggerRun.isPending ? "Queueing..." : "Run now"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {activeRuns > 0 ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={cancelProjectRuns.isPending}
+              onClick={() => cancelProjectRuns.mutate()}
+              className="border-red-500/30 text-red-600 hover:bg-red-500/10 dark:text-red-400"
+            >
+              {cancelProjectRuns.isPending ? "Stopping…" : "Stop (" + activeRuns + ")"}
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            className="gap-1.5 rounded-input bg-brand-primary text-white hover:bg-brand-primary/90"
+            disabled={triggerRun.isPending}
+            onClick={() => triggerRun.mutate()}
+          >
+            <Rocket className="h-4 w-4" />
+            {triggerRun.isPending ? "Queueing..." : "Run now"}
+          </Button>
+        </div>
       </div>
     </div>
   );

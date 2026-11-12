@@ -465,7 +465,6 @@ export function createRunJob(deps: RunJobDeps): RunJob {
       };
     } catch (error) {
       if (await deps.repository.isRunCancelled?.(runId)) {
-        finalized = true;
         await publishEnd(deps, runId, "cancelled", null);
         logger.info("run cancellation won the finalization race");
         return { runId, status: "cancelled", exitCode: null, failureKind: "cancelled" };

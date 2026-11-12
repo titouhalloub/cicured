@@ -18,7 +18,7 @@ afterEach(() => {
 
 describe("OpenRouter provider", () => {
   it("sends system/user messages and maps text and token usage", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
           choices: [{ message: { content: '{"patchDiff":"@@","explanation":"ok"}' } }],
@@ -47,8 +47,8 @@ describe("OpenRouter provider", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledOnce();
-    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
+    const [url, request] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe("https://openrouter.ai/api/v1/chat/completions");
     expect((request.headers as Record<string, string>).Authorization).toBe(
       "Bearer test-openrouter-key",
     );

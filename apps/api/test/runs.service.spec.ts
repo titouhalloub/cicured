@@ -172,6 +172,12 @@ function makeDbStub(
           calls.joinCount += 1;
           return joined;
         },
+        leftJoin: () => ({
+          where: (arg: unknown) => {
+            calls.where.push(arg);
+            return terminal;
+          },
+        }),
       }),
     }),
   };
@@ -563,9 +569,10 @@ describe("RunsService.suggestionsForRun (M4b-2a: GET /runs/:id/suggestions)", ()
 
     // findings -> runs -> projects: three joins, filtered on findings.run_id.
     expect(calls.joinCount).toBe(3);
-    // Two filters: getOwnedRun's runs.id lookup, then the run scoping.
-    expect(calls.where).toHaveLength(2);
-    expect(whereColumnName(calls.where[1])).toBe("run_id");
+    // Three filters: getOwnedRun's runs.id lookup, its cost lookup,
+    // then the suggestions query's findings.runId scope.
+    expect(calls.where).toHaveLength(3);
+    expect(whereColumnName(calls.where[2])).toBe("run_id");
     expect(suggestions).toEqual([
       {
         id: SUGGESTION_ID,
